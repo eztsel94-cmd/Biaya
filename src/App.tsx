@@ -6,7 +6,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TruckUnit, ExpenseRecord, AppUser } from './types/truck';
 import { INITIAL_TRUCKS, INITIAL_EXPENSES } from './data/initialData';
-import { Navbar } from './components/Navbar';
+import { Navbar, NavTabType } from './components/Navbar';
+import { DailyRecordsView } from './components/DailyRecordsView';
 import { DashboardView } from './components/DashboardView';
 import { TrucksView } from './components/TrucksView';
 import { ExpensesView } from './components/ExpensesView';
@@ -35,7 +36,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'trucks' | 'expenses'>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTabType>('daily_records');
 
   // Filter params passed when navigating to expenses
   const [expensesInitialTruck, setExpensesInitialTruck] = useState<string>('all');
@@ -558,6 +559,8 @@ export default function App() {
             <span>ID Sesi: {CLIENT_AUTHOR_ID}</span>
           </div>
         </div>
+
+        {activeTab === 'daily_records' && <DailyRecordsView />}
 
         {activeTab === 'dashboard' && (
           <DashboardView
