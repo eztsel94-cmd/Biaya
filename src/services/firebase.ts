@@ -437,6 +437,19 @@ export async function deleteDailyRecord(id: string): Promise<void> {
   await deleteDoc(targetDoc);
 }
 
+export async function updateDailyRecord(record: DailyRecord): Promise<void> {
+  const targetDoc = doc(db, COLLECTIONS.DAILY_RECORDS, record.id);
+  await updateDoc(targetDoc, {
+    date: record.date,
+    truckNumber: record.truckNumber.trim().toUpperCase(),
+    driverName: record.driverName.trim(),
+    tonnage: Number(record.tonnage),
+    afdeling: record.afdeling.trim(),
+    notes: (record.notes || "").trim(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ==========================================
 // 4. RESET & IMPORT DATA CLOUD FIRESTORE
 // ==========================================

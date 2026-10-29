@@ -7,6 +7,7 @@ import {
   MapPin,
   Plus,
   Trash2,
+  Edit2,
   Download,
   Search,
   Filter,
@@ -22,12 +23,14 @@ import {
   ChevronDown,
   X,
   ExternalLink,
+  Save,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DailyRecord, NewDailyRecord } from '../types/dailyRecord';
 import {
   subscribeToDailyRecords,
   addDailyRecord,
+  updateDailyRecord,
   deleteDailyRecord,
   COLLECTION_NAME,
 } from '../services/firebase';
@@ -43,7 +46,7 @@ export const DailyRecordsView: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Form State
+  // Form State Input Baru
   const todayStr = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState<NewDailyRecord>({
     date: todayStr,
@@ -59,6 +62,11 @@ export const DailyRecordsView: React.FC = () => {
   const [filterAfdeling, setFilterAfdeling] = useState<string>('ALL');
   const [filterTruck, setFilterTruck] = useState<string>('ALL');
   const [filterDateRange, setFilterDateRange] = useState<'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH'>('ALL');
+
+  // Edit modal state
+  const [recordToEdit, setRecordToEdit] = useState<DailyRecord | null>(null);
+  const [editFormData, setEditFormData] = useState<DailyRecord | null>(null);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
   // Delete modal state
   const [recordToDelete, setRecordToDelete] = useState<DailyRecord | null>(null);
@@ -96,7 +104,7 @@ export const DailyRecordsView: React.FC = () => {
     };
   }, []);
 
-  // Handle Submit Form
+  // Handle Submit Form Input Baru
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -105,7 +113,7 @@ export const DailyRecordsView: React.FC = () => {
       return;
     }
     if (!formData.driverName.trim()) {
-      showToast('Mohon masukkan Nama Supir / Pemuat (contoh: Anton)', 'error');
+      showToast('Mohon masukkan Nama Pemuat (contoh: Anton)', 'error');
       return;
     }
     const ton = parseFloat(String(formData.tonnage));
@@ -142,13 +150,60 @@ export const DailyRecordsView: React.FC = () => {
     }
   };
 
-  // Handle Hapus Data
+  // Buka Modal Edit
+  const handleOpenEditModal = (record: DailyRecord) => {
+    setRecordToEdit(record);
+    setEditFormData({ ...record });
+  };
+
+  // Simpan Perubahan Edit ke Firestore
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editFormData) return;
+
+    if (!editFormData.truckNumber.trim()) {
+      showToast('Mohon masukkan Nomor Unit Truk (contoh: DT 90)', 'error');
+      return;
+    }
+    if (!editFormData.driverName.trim()) {
+      showToast('Mohon masukkan Nama Pemuat (contoh: Anton)', 'error');
+      return;
+    }
+    const ton = parseFloat(String(editFormData.tonnage));
+    if (isNaN(ton) || ton <= 0) {
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 8.5)', 'error');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await updateDailyRecord({
+        ...editFormData,
+        truckNumber: editFormData.truckNumber.trim().toUpperCase(),
+        driverName: editFormData.driverName.trim(),
+        tonnage: ton,
+        afdeling: editFormData.afdeling.trim() || 'Afdeling 1',
+        notes: (editFormData.notes || '').trim(),
+      });
+
+      showToast(`Data unit ${editFormData.truckNumber} berhasil diperbarui di Firestore!`, 'success');
+      setRecordToEdit(null);
+      setEditFormData(null);
+    } catch (err: any) {
+      console.error('Error updateDoc:', err);
+      showToast(`Gagal memperbarui data: ${err.message}`, 'error');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // Handle Hapus Data dari Firestore
   const confirmDelete = async () => {
     if (!recordToDelete) return;
     setIsDeleting(true);
     try {
       await deleteDailyRecord(recordToDelete.id);
-      showToast(`Catatan unit ${recordToDelete.truckNumber} berhasil dihapus dari database.`, 'info');
+      showToast(`Catatan unit ${recordToDelete.truckNumber} berhasil dihapus dari Firestore.`, 'info');
       setRecordToDelete(null);
     } catch (err: any) {
       console.error('Error deleteDoc:', err);
@@ -192,7 +247,7 @@ export const DailyRecordsView: React.FC = () => {
       No: index + 1,
       Tanggal: r.date,
       'Unit Truk': r.truckNumber,
-      'Nama Supir / Pemuat': r.driverName,
+      'Nama Pemuat': r.driverName,
       Afdeling: r.afdeling,
       'Tonase (Ton)': r.tonnage,
       'Catatan / Keterangan': r.notes || '-',
@@ -333,7 +388,7 @@ export const DailyRecordsView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-2">
-              Pencatatan real-time pengangkutan Tandan Buah Segar (TBS) per unit truk, supir/pemuat, afdeling, dan tonase ke Firebase Firestore.
+              Pencatatan real-time pengangkutan Tandan Buah Segar (TBS) per unit truk, pemuat, afdeling, dan tonase ke Firebase Firestore.
             </p>
           </div>
 
@@ -349,7 +404,7 @@ export const DailyRecordsView: React.FC = () => {
 
             <button
               onClick={handleExportExcel}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40"
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 cursor-pointer"
               title="Unduh seluruh data sebagai spreadsheet Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-4 h-4" />
@@ -439,7 +494,7 @@ export const DailyRecordsView: React.FC = () => {
 
       {/* Grid Utama: Form Input Harian & Tabel Riwayat */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Kolom Kiri: Form Input Data Harian Sederhana (4/12) */}
+        {/* Kolom Kiri: Form Input Data Harian Sederhana (5/12) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl sticky top-4">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
@@ -495,7 +550,7 @@ export const DailyRecordsView: React.FC = () => {
                       key={dt}
                       type="button"
                       onClick={() => setFormData({ ...formData, truckNumber: dt })}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium transition border ${
+                      className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium transition border cursor-pointer ${
                         formData.truckNumber.toUpperCase() === dt
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
                           : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
@@ -507,11 +562,11 @@ export const DailyRecordsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Nama Supir / Pemuat */}
+              {/* Nama Pemuat */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-emerald-400" />
-                  Nama Pemuat / Supir
+                  Nama Pemuat
                 </label>
                 <input
                   type="text"
@@ -551,7 +606,7 @@ export const DailyRecordsView: React.FC = () => {
                       key={preset}
                       type="button"
                       onClick={() => setFormData({ ...formData, tonnage: preset as any })}
-                      className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/60 font-mono"
+                      className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/60 font-mono cursor-pointer"
                     >
                       {preset}T
                     </button>
@@ -581,7 +636,7 @@ export const DailyRecordsView: React.FC = () => {
                       key={afd}
                       type="button"
                       onClick={() => setFormData({ ...formData, afdeling: afd })}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border ${
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
                         formData.afdeling === afd
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
                           : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
@@ -637,7 +692,7 @@ export const DailyRecordsView: React.FC = () => {
                   type="button"
                   onClick={handleLoadSampleData}
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <span>Isi 5 Contoh Data Uji Coba</span>
@@ -669,7 +724,7 @@ export const DailyRecordsView: React.FC = () => {
                 <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
                   <button
                     onClick={() => setFilterDateRange('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
                       filterDateRange === 'ALL'
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-400 hover:text-white'
@@ -679,7 +734,7 @@ export const DailyRecordsView: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setFilterDateRange('TODAY')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
                       filterDateRange === 'TODAY'
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-400 hover:text-white'
@@ -689,7 +744,7 @@ export const DailyRecordsView: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setFilterDateRange('7DAYS')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
                       filterDateRange === '7DAYS'
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-400 hover:text-white'
@@ -699,7 +754,7 @@ export const DailyRecordsView: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setFilterDateRange('THIS_MONTH')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
                       filterDateRange === 'THIS_MONTH'
                         ? 'bg-emerald-600 text-white shadow-sm'
                         : 'text-slate-400 hover:text-white'
@@ -716,7 +771,7 @@ export const DailyRecordsView: React.FC = () => {
                   <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="Cari Unit Truk, Supir, Afdeling..."
+                    placeholder="Cari Unit Truk, Pemuat, Afdeling..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-emerald-500 placeholder:text-slate-500 transition"
@@ -724,7 +779,7 @@ export const DailyRecordsView: React.FC = () => {
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -788,7 +843,7 @@ export const DailyRecordsView: React.FC = () => {
                     <tr className="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
                       <th className="py-3 px-3 sm:px-4 font-semibold">Tgl</th>
                       <th className="py-3 px-3 sm:px-4 font-semibold">Unit Truk</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold">Supir</th>
+                      <th className="py-3 px-3 sm:px-4 font-semibold">Pemuat</th>
                       <th className="py-3 px-3 sm:px-4 font-semibold">Afdeling</th>
                       <th className="py-3 px-3 sm:px-4 font-semibold text-right">Tonase</th>
                       <th className="py-3 px-3 sm:px-4 font-semibold hidden md:table-cell">Catatan</th>
@@ -814,7 +869,7 @@ export const DailyRecordsView: React.FC = () => {
                           </span>
                         </td>
 
-                        {/* Supir */}
+                        {/* Pemuat */}
                         <td className="py-3 px-3 sm:px-4 font-medium text-white whitespace-nowrap">
                           {r.driverName}
                         </td>
@@ -843,15 +898,24 @@ export const DailyRecordsView: React.FC = () => {
                           {r.notes || '-'}
                         </td>
 
-                        {/* Aksi: Hapus */}
+                        {/* Aksi: Edit & Hapus */}
                         <td className="py-3 px-3 sm:px-4 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => setRecordToDelete(r)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition"
-                            title="Hapus data ini dari Firestore"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleOpenEditModal(r)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition cursor-pointer"
+                              title="Edit data ini di Firestore"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setRecordToDelete(r)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                              title="Hapus data ini dari Firestore"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -879,6 +943,211 @@ export const DailyRecordsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Modal Edit Data Harian TBS */}
+      {recordToEdit && editFormData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Edit Catatan Harian TBS</h3>
+                  <p className="text-xs text-slate-400">
+                    Perubahan akan langsung tersinkronisasi ke Firebase Firestore
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecordToEdit(null);
+                  setEditFormData(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              {/* Tanggal */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  Tanggal Pengiriman
+                </label>
+                <input
+                  type="date"
+                  value={editFormData.date}
+                  onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+
+              {/* Unit Truk */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                  Nomor Unit Truk
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.truckNumber}
+                  onChange={(e) => setEditFormData({ ...editFormData, truckNumber: e.target.value })}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-semibold text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {QUICK_TRUCKS.map((dt) => (
+                    <button
+                      key={dt}
+                      type="button"
+                      onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium transition border cursor-pointer ${
+                        editFormData.truckNumber.toUpperCase() === dt
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                      }`}
+                    >
+                      {dt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Nama Pemuat */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-emerald-400" />
+                  Nama Pemuat
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.driverName}
+                  onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+
+              {/* Tonase (Ton) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                  Tonase (Ton)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.1"
+                    max="50"
+                    value={editFormData.tonnage}
+                    onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
+                    required
+                    className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
+                    TON
+                  </div>
+                </div>
+                <div className="flex gap-1.5 mt-2">
+                  {[7.5, 8.0, 8.5, 9.0, 9.5].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setEditFormData({ ...editFormData, tonnage: preset as any })}
+                      className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/60 font-mono cursor-pointer"
+                    >
+                      {preset}T
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Afdeling */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                  Afdeling / Lokasi Panen
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.afdeling}
+                  onChange={(e) => setEditFormData({ ...editFormData, afdeling: e.target.value })}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {QUICK_AFDELINGS.map((afd) => (
+                    <button
+                      key={afd}
+                      type="button"
+                      onClick={() => setEditFormData({ ...editFormData, afdeling: afd })}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
+                        editFormData.afdeling === afd
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                      }`}
+                    >
+                      {afd}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Catatan / Keterangan */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Catatan / Keterangan (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.notes || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+
+              {/* Tombol Aksi Modal */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecordToEdit(null);
+                    setEditFormData(null);
+                  }}
+                  disabled={isUpdating}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-950/40 cursor-pointer"
+                >
+                  {isUpdating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan ke Firestore...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Konfirmasi Hapus Data */}
       {recordToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
@@ -899,7 +1168,7 @@ export const DailyRecordsView: React.FC = () => {
                 <span className="font-mono font-bold text-emerald-400">{recordToDelete.truckNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Supir / Pemuat:</span>
+                <span className="text-slate-400">Pemuat:</span>
                 <span className="font-medium text-white">{recordToDelete.driverName}</span>
               </div>
               <div className="flex justify-between">
@@ -925,7 +1194,7 @@ export const DailyRecordsView: React.FC = () => {
                 type="button"
                 onClick={() => setRecordToDelete(null)}
                 disabled={isDeleting}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
               >
                 Batal
               </button>
