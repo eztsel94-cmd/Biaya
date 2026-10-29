@@ -25,6 +25,7 @@ import {
   setCurrentUser,
   subscribeToEvents,
 } from './services/api';
+import { onPermissionErrorChange } from './services/firebase';
 import {
   Truck,
   RotateCcw,
@@ -57,11 +58,12 @@ export default function App() {
   const [currentUser, setActiveUser] = useState<AppUser>(() => getCurrentUser());
   const [availableUsers, setAvailableUsers] = useState<AppUser[]>(() => api.getInitialUsers());
 
-  // Real-time synchronization state (localStorage & multi-tab)
+  // Real-time synchronization state (Firebase Firestore)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(true);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [liveNotification, setLiveNotification] = useState<{ message: string; isRemote: boolean } | null>(null);
 
-  // App data state - loaded directly from browser localStorage (zero delay, permanent)
+  // App data state - loaded directly from Firebase Firestore onSnapshot
   const [trucks, setTrucks] = useState<TruckUnit[]>(() => api.getInitialTrucks());
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() => api.getInitialExpenses());
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -73,11 +75,16 @@ export default function App() {
     }, 4500);
   };
 
-  // 1. Initial Load & Multi-tab sync via BroadcastChannel / storage events
+  // 1. Initial Load & Firebase Firestore onSnapshot sync
   useEffect(() => {
     let isMounted = true;
 
-    // Refresh users from storage
+    // Pantau error izin Firestore
+    const unsubPerm = onPermissionErrorChange((err) => {
+      if (isMounted) setPermissionError(err);
+    });
+
+    // Refresh users
     api
       .getSystemUsers()
       .then((users) => {
@@ -88,150 +95,22 @@ export default function App() {
         console.warn('Gagal memuat user sistem:', err);
       });
 
-    // Refresh data from storage
-    api
-      .getData()
-      .then((data) => {
-        if (!isMounted) return;
-        if (data.trucks && Array.isArray(data.trucks)) {
-          setTrucks(data.trucks);
-        }
-        if (data.expenses && Array.isArray(data.expenses)) {
-          setExpenses(data.expenses);
-        }
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        console.warn('Gagal memuat data dari localStorage:', err);
-        setIsLoading(false);
-      });
-
-    // Subscribe to multi-tab real-time events
+    // Subscribe to Firestore onSnapshot events (Armada & Pengeluaran)
     const unsubscribe = subscribeToEvents((data: RealtimeEventData) => {
       if (!isMounted) return;
-      const isRemote = Boolean(data.authorId && data.authorId !== CLIENT_AUTHOR_ID);
+      setIsRealtimeConnected(true);
 
       switch (data.type) {
         case 'INIT':
           if (data.payload?.trucks) setTrucks(data.payload.trucks);
           if (data.payload?.expenses) setExpenses(data.payload.expenses);
           break;
-
-        case 'EXPENSE_ADDED':
-          setExpenses((prev) => {
-            const exists = prev.some((e) => e.id === data.payload.id);
-            if (exists) return prev;
-            return [data.payload, ...prev];
-          });
-          if (isRemote) {
-            notify(
-              `User lain menambahkan biaya baru: "${data.payload.description}" (Rp ${data.payload.amount?.toLocaleString('id-ID')})`,
-              true
-            );
-          }
-          break;
-
-        case 'EXPENSES_BATCH_ADDED':
-          if (Array.isArray(data.payload?.expenses)) {
-            setExpenses((prev) => {
-              const existingIds = new Set(prev.map((e) => e.id));
-              const newItems = data.payload.expenses.filter((e: any) => !existingIds.has(e.id));
-              return [...newItems, ...prev];
-            });
-            if (isRemote) {
-              notify(
-                `${data.payload.authorName || 'User lain'} mengimpor ${data.payload.count || data.payload.expenses.length} data biaya dari Excel!`,
-                true
-              );
-            }
-          }
-          break;
-
-        case 'EXPENSE_UPDATED':
-          setExpenses((prev) =>
-            prev.map((e) => (e.id === data.payload.id ? data.payload : e))
-          );
-          if (isRemote) {
-            notify(`Catatan biaya diperbarui secara real-time oleh pengguna lain.`, true);
-          }
-          break;
-
-        case 'EXPENSE_DELETED':
-          setExpenses((prev) => prev.filter((e) => e.id !== data.payload.id));
-          if (isRemote) {
-            notify(`Catatan biaya dihapus oleh pengguna lain.`, true);
-          }
-          break;
-
-        case 'TRUCK_ADDED':
-          setTrucks((prev) => {
-            const exists = prev.some((t) => t.id === data.payload.id);
-            if (exists) return prev;
-            return [...prev, data.payload];
-          });
-          if (isRemote) {
-            notify(`Unit truk baru (${data.payload.code}) ditambahkan oleh pengguna lain!`, true);
-          }
-          break;
-
-        case 'TRUCK_UPDATED':
-          if (data.payload?.trucks && Array.isArray(data.payload.trucks)) {
-            setTrucks(data.payload.trucks);
-          } else if (data.payload?.id) {
-            setTrucks((prev) =>
-              prev.map((t) => (t.id === data.payload.id ? data.payload : t))
-            );
-          }
-          if (isRemote) {
-            notify(`Informasi armada truk diperbarui secara real-time.`, true);
-          }
-          break;
-
-        case 'TRUCK_DELETED':
-          setTrucks((prev) => prev.filter((t) => t.id !== data.payload.id));
-          if (data.payload?.deleteRelated) {
-            setExpenses((prev) => prev.filter((e) => e.truckId !== data.payload.id));
-          }
-          if (isRemote) {
-            notify(`Unit truk telah dihapus oleh pengguna lain.`, true);
-          }
-          break;
-
-        case 'DATABASE_RESET':
-          setTrucks(data.payload.trucks || []);
-          setExpenses(data.payload.expenses || []);
-          if (isRemote) {
-            notify(`Database telah di-reset ke 3 unit default oleh administrator.`, true);
-          }
-          break;
-
-        case 'DATABASE_IMPORTED':
-          if (data.payload.trucks) setTrucks(data.payload.trucks);
-          if (data.payload.expenses) setExpenses(data.payload.expenses);
-          if (isRemote) {
-            notify(`Database diperbarui dari file backup oleh pengguna lain.`, true);
-          }
-          break;
-
-        case 'USERS_UPDATED':
-        case 'USER_ROLE_UPDATED':
-          if (Array.isArray(data.payload?.users)) {
-            setAvailableUsers(data.payload.users);
-            const me = data.payload.users.find((u: AppUser) => u.id === currentUser.id);
-            if (me) {
-              setActiveUser(me);
-              setCurrentUser(me);
-            }
-          }
-          if (isRemote && data.payload?.user) {
-            notify(`Hak akses user ${data.payload.user.name} diperbarui oleh Admin.`, true);
-          }
-          break;
       }
     });
 
     return () => {
       isMounted = false;
+      unsubPerm();
       unsubscribe();
     };
   }, []);
@@ -269,12 +148,7 @@ export default function App() {
   const handleAddExpense = async (newExpenseData: Omit<ExpenseRecord, 'id' | 'createdAt'>) => {
     try {
       const created = await api.addExpense(newExpenseData);
-      setExpenses((prev) => {
-        const already = prev.some((e) => e.id === created.id);
-        if (already) return prev;
-        return [created, ...prev];
-      });
-      notify('Catatan pengeluaran berhasil disimpan secara permanen di browser (localStorage).');
+      notify('Catatan pengeluaran berhasil disimpan langsung ke cloud Firebase Firestore.');
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal menyimpan pengeluaran');
@@ -284,12 +158,7 @@ export default function App() {
   const handleBatchImportExpenses = async (items: Omit<ExpenseRecord, 'id' | 'createdAt'>[]) => {
     try {
       const created = await api.addExpensesBatch(items);
-      setExpenses((prev) => {
-        const existingIds = new Set(prev.map((e) => e.id));
-        const newItems = created.filter((e) => !existingIds.has(e.id));
-        return [...newItems, ...prev];
-      });
-      notify(`Berhasil mengimpor & menyimpan ${created.length} data biaya ke browser (localStorage)!`);
+      notify(`Berhasil mengimpor & menyimpan ${created.length} data biaya ke cloud Firebase Firestore!`);
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal mengimpor batch data pengeluaran');
@@ -299,9 +168,8 @@ export default function App() {
 
   const handleUpdateExpense = async (updatedExpense: ExpenseRecord) => {
     try {
-      const updated = await api.updateExpense(updatedExpense);
-      setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
-      notify('Catatan biaya berhasil diperbarui.');
+      await api.updateExpense(updatedExpense);
+      notify('Catatan biaya berhasil diperbarui di cloud Firestore.');
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal merubah data biaya');
@@ -311,8 +179,7 @@ export default function App() {
   const handleDeleteExpense = async (expenseId: string) => {
     try {
       await api.deleteExpense(expenseId);
-      setExpenses((prev) => prev.filter((e) => e.id !== expenseId));
-      notify('Catatan biaya berhasil dihapus secara permanen.');
+      notify('Catatan biaya berhasil dihapus dari cloud Firestore.');
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal menghapus data biaya');
@@ -322,16 +189,7 @@ export default function App() {
   const handleAddTruck = async (newTruckData: Omit<TruckUnit, 'id'>): Promise<TruckUnit> => {
     try {
       const created = await api.addTruck(newTruckData);
-      setTrucks((prev) => {
-        const already = prev.some(
-          (t) =>
-            t.id === created.id ||
-            t.code.trim().toLowerCase() === created.code.trim().toLowerCase()
-        );
-        if (already) return prev;
-        return [...prev, created];
-      });
-      notify(`Unit ${created.code} (${created.plateNumber}) berhasil ditambahkan dan disimpan permanen.`);
+      notify(`Unit ${created.code} (${created.plateNumber}) berhasil ditambahkan ke cloud Firestore.`);
       return created;
     } catch (err: any) {
       console.error(err);
@@ -343,8 +201,7 @@ export default function App() {
   const handleUpdateTruck = async (updatedTruck: TruckUnit) => {
     try {
       const saved = await api.updateTruck(updatedTruck);
-      setTrucks((prev) => prev.map((t) => (t.id === saved.id ? saved : t)));
-      notify(`Unit ${saved.code} (${saved.plateNumber}) berhasil diperbarui.`);
+      notify(`Unit ${saved.code} (${saved.plateNumber}) berhasil diperbarui di cloud Firestore.`);
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal memperbarui unit');
@@ -354,11 +211,7 @@ export default function App() {
   const handleDeleteTruck = async (truckId: string, deleteRelated: boolean) => {
     try {
       await api.deleteTruck(truckId, deleteRelated);
-      setTrucks((prev) => prev.filter((t) => t.id !== truckId));
-      if (deleteRelated) {
-        setExpenses((prev) => prev.filter((e) => e.truckId !== truckId));
-      }
-      notify('Unit truk berhasil dihapus secara permanen dari penyimpanan.');
+      notify('Unit truk berhasil dihapus dari cloud Firestore.');
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal menghapus unit truk');
@@ -370,7 +223,7 @@ export default function App() {
       const res = await api.resetData();
       setTrucks(res.trucks);
       setExpenses(res.expenses);
-      notify('Data berhasil di-reset kembali ke 3 Unit Armada Default (Unit 01, Unit 90, Unit 03).');
+      notify('Data cloud Firestore berhasil di-reset kembali ke 3 Unit Armada Default (Unit 01, Unit 90, Unit 03).');
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal mereset data');
@@ -380,12 +233,10 @@ export default function App() {
   const handleImportData = async (data: { trucks: TruckUnit[]; expenses: ExpenseRecord[] }) => {
     try {
       await api.importData(data);
-      setTrucks(data.trucks);
-      setExpenses(data.expenses);
-      notify('Data berhasil dipulihkan dari file backup!');
+      notify('Data berhasil dipulihkan dan diunggah ke cloud Firestore!');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Gagal mengimpor ke server');
+      notify(err.message || 'Gagal mengimpor ke Firestore');
     }
   };
 
@@ -533,19 +384,43 @@ export default function App() {
 
       {/* Main App Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        {/* Real-time multi-user status alert bar */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+        {/* Warning jika aturan Firestore belum diset (Missing Permissions) */}
+        {permissionError && (
+          <div className="mb-5 p-4 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs sm:text-sm flex items-start gap-3 shadow-lg">
+            <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-white">Kendala Izin Akses Firestore (Missing Permissions):</p>
+              <p>{permissionError}</p>
+              <p className="text-slate-300 text-xs">
+                Buka <strong>Firebase Console</strong> &rarr; Project <strong>traksi-22f5b</strong> &rarr; <strong>Firestore Database</strong> &rarr; Tab <strong>Rules</strong>, ubah aturannya menjadi:
+              </p>
+              <pre className="p-2 rounded bg-black/60 font-mono text-[11px] text-emerald-400 overflow-x-auto">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* Real-time Firestore Cloud status alert bar */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-md">
           <div className="flex items-center gap-2.5">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                isRealtimeConnected
+                isRealtimeConnected && !permissionError
                   ? 'bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse'
                   : 'bg-amber-400'
               }`}
             />
             <span className="text-slate-300">
-              <strong className="text-white">Penyimpanan Browser (localStorage):</strong>{' '}
-              Data tersimpan otomatis secara permanen di browser Anda. Fitur hapus unit & catatan biaya bekerja langsung tanpa database cloud, siap digunakan di Vercel!
+              <strong className="text-white">Cloud Database Real-Time (Firebase Firestore):</strong>{' '}
+              Semua modul (Dashboard, Armada, Biaya Unit, Catatan Harian) tersambung langsung ke Firestore (<strong>traksi-22f5b</strong>) via <code className="text-emerald-400 font-mono bg-emerald-950/60 px-1 py-0.5 rounded">onSnapshot</code> tanpa localStorage!
             </span>
           </div>
           <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
@@ -556,7 +431,7 @@ export default function App() {
               <span>User: <strong className="text-white">{currentUser.name.split(' ')[0]}</strong> ({currentUser.roleLabel})</span>
             </button>
             <span>•</span>
-            <span>ID Sesi: {CLIENT_AUTHOR_ID}</span>
+            <span className="text-emerald-400 font-semibold">Online Sync</span>
           </div>
         </div>
 
