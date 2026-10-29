@@ -16,6 +16,7 @@ import { AddExpenseModal } from './components/AddExpenseModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { UserRoleModal } from './components/UserRoleModal';
 import { DriverPortalView } from './components/DriverPortalView';
+import { PemuatPortalView } from './components/PemuatPortalView';
 import { findTruckFromUrlQuery } from './utils/driverLink';
 import {
   api,
@@ -45,6 +46,10 @@ export default function App() {
 
   // Dedicated Driver Portal Mode
   const [driverPortalTruckId, setDriverPortalTruckId] = useState<string | null>(null);
+
+  // Dedicated Pemuat Portal Mode (Akses Khusus Terisolasi untuk Pemuat)
+  const [isPemuatPortalMode, setIsPemuatPortalMode] = useState<boolean>(false);
+  const [pemuatPortalName, setPemuatPortalName] = useState<string>('');
 
   // Modal states
   const [isDataManagerOpen, setIsDataManagerOpen] = useState<boolean>(false);
@@ -115,16 +120,40 @@ export default function App() {
     };
   }, []);
 
-  // 2. Detect Driver Portal parameter from URL (?dt=... or ?unit=... or #dt=...)
+  // 2. Detect Dedicated Portals (Pemuat Portal & Driver Portal) from URL
   useEffect(() => {
-    const checkUrlForDriverPortal = () => {
+    const checkUrlForPortals = () => {
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        let query = urlParams.get('dt') || urlParams.get('unit');
+        const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
+        const hashParams = hash ? new URLSearchParams(hash) : null;
 
-        if (!query && window.location.hash) {
-          const hash = window.location.hash.replace(/^#/, '');
-          const hashParams = new URLSearchParams(hash);
+        // A. Cek Akses Khusus Portal Pemuat (?portal=pemuat atau ?pemuat=... atau #pemuat)
+        const portalParam = urlParams.get('portal') || hashParams?.get('portal');
+        const modeParam = urlParams.get('mode') || hashParams?.get('mode');
+        const pemuatParam = urlParams.get('pemuat') || hashParams?.get('pemuat');
+        const namaParam = urlParams.get('nama') || hashParams?.get('nama');
+        const isPemuatHash = hash.toLowerCase().includes('pemuat');
+
+        if (
+          portalParam === 'pemuat' ||
+          modeParam === 'pemuat' ||
+          pemuatParam !== null ||
+          isPemuatHash
+        ) {
+          setIsPemuatPortalMode(true);
+          const targetName =
+            namaParam ||
+            (pemuatParam && pemuatParam !== 'true' && pemuatParam !== '1' ? pemuatParam : '');
+          if (targetName) {
+            setPemuatPortalName(targetName.trim());
+          }
+          return;
+        }
+
+        // B. Cek Akses Khusus Driver Dump Truck (?dt=... atau ?unit=...)
+        let query = urlParams.get('dt') || urlParams.get('unit');
+        if (!query && hashParams) {
           query = hashParams.get('dt') || hashParams.get('unit') || hash;
         }
 
@@ -135,13 +164,13 @@ export default function App() {
           }
         }
       } catch (e) {
-        console.warn('Error reading URL params for driver link:', e);
+        console.warn('Error reading URL params for portals:', e);
       }
     };
 
-    checkUrlForDriverPortal();
-    window.addEventListener('popstate', checkUrlForDriverPortal);
-    return () => window.removeEventListener('popstate', checkUrlForDriverPortal);
+    checkUrlForPortals();
+    window.addEventListener('popstate', checkUrlForPortals);
+    return () => window.removeEventListener('popstate', checkUrlForPortals);
   }, [trucks]);
 
   // Handle data actions with backend API
@@ -278,7 +307,24 @@ export default function App() {
     setIsExcelImportOpen(true);
   };
 
-  // 3. IF IN DEDICATED DRIVER PORTAL MODE:
+  // 3. IF IN DEDICATED ISOLATED PEMUAT PORTAL MODE:
+  // Render ONLY the daily records & trip input for loaders (100% isolated from admin modules)
+  if (isPemuatPortalMode) {
+    return (
+      <PemuatPortalView
+        initialPemuatName={pemuatPortalName}
+        onExitToAdmin={() => {
+          if (window.history.pushState) {
+            const cleanUrl = window.location.origin + window.location.pathname;
+            window.history.pushState({ path: cleanUrl }, '', cleanUrl);
+          }
+          setIsPemuatPortalMode(false);
+        }}
+      />
+    );
+  }
+
+  // 4. IF IN DEDICATED DRIVER PORTAL MODE:
   // Render ONLY this driver's Dump Truck data!
   const activeDriverTruck = driverPortalTruckId
     ? trucks.find((t) => t.id === driverPortalTruckId)
@@ -435,7 +481,14 @@ service cloud.firestore {
           </div>
         </div>
 
-        {activeTab === 'daily_records' && <DailyRecordsView />}
+        {activeTab === 'daily_records' && (
+          <DailyRecordsView
+            onOpenPemuatPortal={(pemuatName) => {
+              if (pemuatName) setPemuatPortalName(pemuatName);
+              setIsPemuatPortalMode(true);
+            }}
+          />
+        )}
 
         {activeTab === 'dashboard' && (
           <DashboardView

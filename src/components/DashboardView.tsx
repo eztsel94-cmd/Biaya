@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   HeartHandshake,
   UserX,
+  FileText,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -430,37 +431,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="space-y-3">
-              {recentExpenses.map((exp) => {
-                const truck = trucks.find((t) => t.id === exp.truckId);
-                const colors = CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.Sparepart;
-                return (
-                  <div
-                    key={exp.id}
-                    className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 transition"
-                  >
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white">{truck?.code || 'Unit'}</span>
-                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} border ${colors.border}`}>
-                          {exp.category}
+              {recentExpenses.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs">
+                  <FileText className="w-8 h-8 mx-auto text-slate-600 mb-2 opacity-50" />
+                  <p className="font-medium text-slate-400">Belum ada catatan pengeluaran biaya.</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Catatan biaya yang diinput akan muncul di sini secara real-time.</p>
+                </div>
+              ) : (
+                recentExpenses.map((exp) => {
+                  const truck = trucks.find((t) => t.id === exp.truckId);
+                  const colors = CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.Sparepart;
+                  return (
+                    <div
+                      key={exp.id}
+                      className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 hover:border-slate-700 transition"
+                    >
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white">{truck?.code || 'Unit'}</span>
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} border ${colors.border}`}>
+                            {exp.category}
+                          </span>
+                        </div>
+                        <span className="font-bold font-mono text-emerald-400">
+                          {formatRupiah(exp.amount)}
                         </span>
                       </div>
-                      <span className="font-bold font-mono text-emerald-400">
-                        {formatRupiah(exp.amount)}
-                      </span>
-                    </div>
 
-                    <p className="text-xs text-slate-300 line-clamp-1 mb-1">
-                      {exp.description}
-                    </p>
+                      <p className="text-xs text-slate-300 line-clamp-1 mb-1">
+                        {exp.description}
+                      </p>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="truncate max-w-[150px]">{exp.vendor}</span>
-                      <span>{formatDateIndo(exp.date)}</span>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span className="truncate max-w-[150px]">{exp.vendor}</span>
+                        <span>{formatDateIndo(exp.date)}</span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
 

@@ -24,6 +24,9 @@ import {
   X,
   ExternalLink,
   Save,
+  Share2,
+  Smartphone,
+  Link2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DailyRecord, NewDailyRecord } from '../types/dailyRecord';
@@ -32,13 +35,20 @@ import {
   addDailyRecord,
   updateDailyRecord,
   deleteDailyRecord,
+  clearAllDemoDataFirestore,
   COLLECTION_NAME,
 } from '../services/firebase';
+import { SharePemuatModal } from './SharePemuatModal';
+import { getPemuatPortalUrl } from '../utils/driverLink';
 
 const QUICK_TRUCKS = ['DT 90', 'DT 01', 'DT 02', 'DT 03', 'DT 05', 'DT 08', 'DT 10', 'DT 12'];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
 
-export const DailyRecordsView: React.FC = () => {
+interface DailyRecordsViewProps {
+  onOpenPemuatPortal?: (pemuatName?: string) => void;
+}
+
+export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuatPortal }) => {
   // State data dari Firestore
   const [records, setRecords] = useState<DailyRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -46,15 +56,15 @@ export const DailyRecordsView: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Form State Input Baru
+  // Form State Input Baru (Default Contoh Cepat untuk Kemudahan Input)
   const todayStr = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState<NewDailyRecord>({
     date: todayStr,
     truckNumber: 'DT 90',
-    driverName: '',
-    tonnage: '' as any,
+    driverName: 'Anton',
+    tonnage: '8.4' as any,
     afdeling: 'Afdeling 1',
-    notes: '',
+    notes: 'TBS Masak PKS Inti',
   });
 
   // Filter & Search State
@@ -71,6 +81,9 @@ export const DailyRecordsView: React.FC = () => {
   // Delete modal state
   const [recordToDelete, setRecordToDelete] = useState<DailyRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Share link pemuat modal state
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
 
   // Notifikasi helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -213,24 +226,84 @@ export const DailyRecordsView: React.FC = () => {
     }
   };
 
-  // Muat contoh data untuk pengujian cepat
+  // Muat 5 contoh data pengiriman TBS ke Firestore untuk uji coba cepat
   const handleLoadSampleData = async () => {
-    const samples: NewDailyRecord[] = [
-      { date: todayStr, truckNumber: 'DT 90', driverName: 'Anton', tonnage: 8.75, afdeling: 'Afdeling 1', notes: 'Trip 1 - PKS Inti' },
-      { date: todayStr, truckNumber: 'DT 01', driverName: 'Bambang', tonnage: 9.10, afdeling: 'Afdeling 2', notes: 'Trip 1 - PKS Inti' },
-      { date: todayStr, truckNumber: 'DT 90', driverName: 'Anton', tonnage: 8.40, afdeling: 'Afdeling 3', notes: 'Trip 2 - Buah Matang' },
-      { date: todayStr, truckNumber: 'DT 03', driverName: 'Hendra', tonnage: 7.95, afdeling: 'Afdeling 1', notes: 'Trip 1 - Plasma' },
-      { date: todayStr, truckNumber: 'DT 02', driverName: 'Suryanto', tonnage: 8.80, afdeling: 'Divisi Inti', notes: 'Trip Siang' },
-    ];
-
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      for (const item of samples) {
-        await addDailyRecord(item);
+      const sampleRows: Array<{
+        date: string;
+        truckNumber: string;
+        driverName: string;
+        tonnage: number;
+        afdeling: string;
+        notes: string;
+      }> = [
+        {
+          date: todayStr,
+          truckNumber: 'DT 90',
+          driverName: 'Anton',
+          tonnage: 8.4,
+          afdeling: 'Afdeling 1',
+          notes: 'TBS Masak Blok A12 PKS Inti',
+        },
+        {
+          date: todayStr,
+          truckNumber: 'DT 01',
+          driverName: 'Bambang',
+          tonnage: 8.1,
+          afdeling: 'Afdeling 2',
+          notes: 'TBS Buah Super Divisi 2',
+        },
+        {
+          date: todayStr,
+          truckNumber: 'DT 03',
+          driverName: 'Suryanto',
+          tonnage: 8.65,
+          afdeling: 'Afdeling 3',
+          notes: 'TBS Plasma Kemitraan',
+        },
+        {
+          date: todayStr,
+          truckNumber: 'DT 90',
+          driverName: 'Anton',
+          tonnage: 8.25,
+          afdeling: 'Afdeling 1',
+          notes: 'Trip Sore Pabrik Kelapa Sawit',
+        },
+        {
+          date: todayStr,
+          truckNumber: 'DT 02',
+          driverName: 'Rahmad',
+          tonnage: 7.9,
+          afdeling: 'Afdeling 4',
+          notes: 'TBS Restan Panen Pagi',
+        },
+      ];
+
+      for (const row of sampleRows) {
+        await addDailyRecord(row);
       }
-      showToast(`Berhasil menambahkan ${samples.length} contoh data ke Firebase Firestore!`, 'success');
+      showToast('5 data contoh pengiriman TBS berhasil dimasukkan ke Firestore!', 'success');
     } catch (err: any) {
-      showToast(`Gagal memuat contoh data: ${err.message}`, 'error');
+      console.error('Error insert sample data:', err);
+      showToast(`Gagal memasukkan contoh data: ${err.message}`, 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Bersihkan data contoh dari Firestore
+  const handleClearDemoData = async () => {
+    if (!window.confirm('Bersihkan seluruh data contoh / uji coba dari Firestore? Data catatan asli Anda tidak akan dihapus.')) return;
+    setIsSubmitting(true);
+    try {
+      const res = await clearAllDemoDataFirestore();
+      showToast(
+        `Berhasil membersihkan data contoh dari Firestore (${res.deletedDaily} catatan rit & ${res.deletedExpenses} biaya demo dibersihkan).`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(`Gagal membersihkan data contoh: ${err.message}`, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -401,6 +474,42 @@ export const DailyRecordsView: React.FC = () => {
               </span>
               <span>Firestore: <strong className="text-emerald-400 font-mono">traksi-22f5b</strong></span>
             </div>
+
+            {/* Tombol Bagikan Link Khusus Pemuat (Terisolasi) */}
+            <button
+              onClick={() => setIsShareModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-black transition shadow-lg shadow-emerald-500/25 cursor-pointer"
+              title="Buka & bagikan tautan khusus pemuat agar bisa akses terisolasi dari smartphone"
+            >
+              <Share2 className="w-4 h-4 text-slate-950" />
+              <span>Link Khusus Pemuat</span>
+              <span className="hidden sm:inline-block bg-slate-950/20 px-1.5 py-0.2 rounded text-[10px] font-extrabold uppercase">
+                Terisolasi
+              </span>
+            </button>
+
+            {/* Tombol Isi 5 Contoh Data */}
+            <button
+              onClick={handleLoadSampleData}
+              disabled={isSubmitting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
+              title="Isi contoh 5 data pengangkutan TBS untuk simulasi / uji coba cepat"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Isi 5 Contoh Data</span>
+              <span className="sm:hidden">Contoh Data</span>
+            </button>
+
+            <button
+              onClick={handleClearDemoData}
+              disabled={isSubmitting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-950/70 hover:text-rose-300 text-slate-400 border border-slate-700 hover:border-rose-500/40 text-xs font-semibold transition cursor-pointer"
+              title="Bersihkan seluruh data contoh / demo dari Firestore"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Bersihkan Contoh</span>
+              <span className="sm:hidden">Bersihkan</span>
+            </button>
 
             <button
               onClick={handleExportExcel}
@@ -682,23 +791,6 @@ export const DailyRecordsView: React.FC = () => {
               </button>
             </form>
 
-            {/* Quick Helper Button: Muat data sample bila database kosong */}
-            {records.length === 0 && !loading && (
-              <div className="mt-4 pt-4 border-t border-slate-800 text-center">
-                <p className="text-xs text-slate-400 mb-2">
-                  Database masih kosong di Firestore.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleLoadSampleData}
-                  disabled={isSubmitting}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Isi 5 Contoh Data Uji Coba</span>
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -828,11 +920,11 @@ export const DailyRecordsView: React.FC = () => {
               <div className="py-16 text-center text-slate-400 space-y-3 border border-dashed border-slate-800 rounded-2xl">
                 <Truck className="w-12 h-12 text-slate-600 mx-auto" />
                 <p className="text-sm font-semibold text-slate-300">
-                  {records.length === 0 ? 'Belum ada catatan harian' : 'Tidak ada data yang cocok dengan filter'}
+                  {records.length === 0 ? 'Belum ada catatan pengangkutan TBS' : 'Tidak ada data yang cocok dengan filter'}
                 </p>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
                   {records.length === 0
-                    ? 'Gunakan form di sebelah kiri untuk menginput data rit TBS pertama Anda.'
+                    ? 'Silakan isi form di sebelah kiri untuk mencatat rit pengangkutan TBS pertama Anda ke database cloud.'
                     : 'Coba ubah kata kunci pencarian atau sesuaikan filter periode dan afdeling.'}
                 </p>
               </div>
@@ -1220,6 +1312,21 @@ export const DailyRecordsView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Share Pemuat Isolated Link Modal */}
+      <SharePemuatModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        existingPemuatNames={Array.from(new Set(records.map((r) => r.driverName).filter(Boolean)))}
+        onOpenPreview={(name) => {
+          if (onOpenPemuatPortal) {
+            onOpenPemuatPortal(name);
+          } else {
+            const url = getPemuatPortalUrl(name);
+            window.open(url, '_blank');
+          }
+        }}
+      />
     </div>
   );
 };

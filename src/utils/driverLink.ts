@@ -82,3 +82,44 @@ export function findTruckFromUrlQuery(trucks: TruckUnit[], queryString: string):
 
   return matchCodeNormalized || null;
 }
+
+/**
+ * Builds the direct, dedicated link for a Loader / Pemuat to access the isolated daily records portal.
+ * Uses query parameter `portal=pemuat` (and optional `nama=...`).
+ */
+export function getPemuatPortalUrl(pemuatName?: string): string {
+  if (typeof window === 'undefined') {
+    return pemuatName && pemuatName.trim()
+      ? `?portal=pemuat&nama=${encodeURIComponent(pemuatName.trim())}`
+      : '?portal=pemuat';
+  }
+  const origin = window.location.origin;
+  const pathname = window.location.pathname;
+  if (pemuatName && pemuatName.trim()) {
+    return `${origin}${pathname}?portal=pemuat&nama=${encodeURIComponent(pemuatName.trim())}`;
+  }
+  return `${origin}${pathname}?portal=pemuat`;
+}
+
+/**
+ * Generates a pre-filled WhatsApp share URL for sending the isolated portal link to a loader.
+ */
+export function getWhatsAppSharePemuatUrl(options?: {
+  pemuatName?: string;
+  phone?: string;
+  directUrl?: string;
+}): string {
+  const pemuatName = options?.pemuatName?.trim();
+  const url = options?.directUrl || getPemuatPortalUrl(pemuatName);
+  const phone = formatPhoneNumberForWhatsApp(options?.phone);
+
+  const greeting = pemuatName ? `Halo Pak *${pemuatName}*,` : 'Halo Rekan Pemuat TBS Kebun,';
+  const message = `${greeting}\n\nBerikut *Link Khusus Riwayat & Input Catatan Harian Truk TBS* untuk akses di lapangan:\n\n👉 ${url}\n\n📱 *Keunggulan Link Khusus Pemuat:*\n• Langsung terbuka di HP tanpa perlu login/password rumit\n• Terisolasi khusus untuk catatan rit & tonase TBS harian\n• Data tersambung langsung secara real-time ke sistem Firebase traksi\n\n_Silakan simpan link ini di WhatsApp Anda atau pasang bookmark di layar HP._`;
+
+  const encodedMessage = encodeURIComponent(message);
+  if (phone) {
+    return `https://wa.me/${phone}?text=${encodedMessage}`;
+  }
+  return `https://wa.me/?text=${encodedMessage}`;
+}
+

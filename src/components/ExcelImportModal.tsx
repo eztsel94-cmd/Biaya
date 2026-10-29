@@ -118,63 +118,43 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     }
   };
 
-  // Sample data presets
+  // Muat contoh catatan bebas untuk pengujian cepat
   const handleLoadSampleDT90 = () => {
-    const sample = `DT 90
-- Bio solar 120 liter 850.000 SPBU Pasir Pengaraian
-- Ganti kampas rem depan Bendix 450rb Toko Mandiri
-- Ongkos mekanik las & stel rem 200.000 Bengkel Berkah
-- Tunjangan BPJS Ketenagakerjaan supir 175.000
+    setActiveTab('freeform');
+    setInputText(`DT 90
+- Bio solar 100 liter 850.000 SPBU Pasir
+- Kampas rem depan bendix 450rb
+- Ongkos montir bengkel las 200rb
+- Tunjangan BPJS supir 175.000
 - Tunjangan Jamsostek supir 150rb
-- Potongan mangkir supir 1 hari 125.000
-- Upah supir Agus trip afdeling 2 450.000
-- Kuras oli mesin Meditran SX4 580rb Toko Nusantara`;
-
-    setInputText(sample);
+- Potongan mangkir 1 hari 125.000
+- Upah supir ritase afdeling 2 450.000
+- Ganti oli mesin meditran 550rb`);
     setErrorMessage(null);
-
-    // Auto-parse immediately for instant delight
-    try {
-      const result = parseFreeformNotes(sample, trucks, selectedDefaultTruck);
-      setParsedItems(result.items);
-      setDetectedUnits(result.detectedUnits);
-      setUnmatchedUnits(result.unmatchedUnits);
-    } catch {
-      // ignore
-    }
   };
 
   const handleLoadSampleMultiDT = () => {
-    const sample = `Catatan Biaya TBS Hari Ini:
+    setActiveTab('freeform');
+    setInputText(`PENGELUARAN ARMADA TRUK TBS - 24 MARET
 
-DT 90
-- BioSolar 110 liter 748.000 SPBU Simpang
-- Jasa tune up montir bengkel 250rb
-- Tunjangan BPJS supir Agus 175.000
-- Potongan mangkir supir 125rb
-- Upah supir ritase 450rb
+DT 90:
+- Bio solar 100 liter 850.000
+- Kampas rem depan 450rb
+- Tunjangan BPJS supir 175.000
+- Tunjangan Jamsostek supir 150.000
+- Potongan mangkir supir 125.000
 
-DT 01
-- Ban luar belakang Bridgestone 1.950.000 Toko Ban Jaya
-- Jasa stel rem 150rb
-- Tunjangan Jamsostek supir Budi 150.000
-- Uang jalan supir TBS 400rb
+DT 01:
+- Bio solar 90 liter 750.000 SPBU Pasir
+- Ganti ban luar bridgestone 1.950.000
+- Ongkos las bak dump truk 350rb
+- Ganti oli gardan rored 320rb
 
-DT 03
-- Beli per daun 4 lembar 1.420.000
-- Kuras oli mesin Rimula 620rb`;
-
-    setInputText(sample);
+DT 03:
+- Solar industri 800.000
+- Filter solar & oli iself 380rb
+- Jasa tuneup diesel 250rb`);
     setErrorMessage(null);
-
-    try {
-      const result = parseFreeformNotes(sample, trucks, selectedDefaultTruck);
-      setParsedItems(result.items);
-      setDetectedUnits(result.detectedUnits);
-      setUnmatchedUnits(result.unmatchedUnits);
-    } catch {
-      // ignore
-    }
   };
 
   // Handle file upload
@@ -556,13 +536,13 @@ DT 03
               </button>
             </div>
 
-            {/* Quick Presets & Download Template */}
+            {/* Action Buttons & Presets */}
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={handleLoadSampleDT90}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 transition"
-                title="Muat contoh tulisan catatan pengeluaran khusus DT 90"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition cursor-pointer"
+                title="Muat contoh catatan biaya unit DT 90"
               >
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Contoh DT 90</span>
@@ -571,20 +551,39 @@ DT 03
               <button
                 type="button"
                 onClick={handleLoadSampleMultiDT}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                title="Muat contoh catatan multi-unit DT 90, DT 01, DT 03"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 transition cursor-pointer"
+                title="Muat contoh catatan gabungan banyak truk (DT 90, DT 01, DT 03)"
               >
-                <Layers className="w-3.5 h-3.5 text-slate-400" />
+                <Sparkles className="w-3.5 h-3.5 text-sky-400" />
                 <span>Contoh Multi Unit</span>
               </button>
+
+              {inputText && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputText('');
+                    setParsedItems([]);
+                    setDetectedUnits([]);
+                    setUnmatchedUnits([]);
+                    setErrorMessage(null);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 border border-slate-700 hover:border-rose-500/40 transition cursor-pointer"
+                  title="Kosongkan teks yang ditempel"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Kosongkan Teks</span>
+                </button>
+              )}
 
               <button
                 type="button"
                 onClick={handleDownloadTemplate}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 transition"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
+                title="Unduh format template spreadsheet Excel (.xlsx)"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>Template Excel</span>
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Format Template Excel</span>
               </button>
             </div>
           </div>

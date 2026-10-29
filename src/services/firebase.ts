@@ -239,17 +239,17 @@ export function subscribeToFirestoreExpenses(
     const q = query(expensesCollection, orderBy("date", "desc"));
     return onSnapshot(
       q,
-      async (snapshot) => {
+      (snapshot) => {
         setPermissionError(null);
+
+        // Jika koleksi biaya di Firestore masih kosong, masukkan 22 data contoh secara otomatis
         if (snapshot.empty && !isExpensesBootstrapped) {
           isExpensesBootstrapped = true;
-          console.info("Koleksi biaya di Firestore masih kosong. Melakukan inisialisasi pengeluaran default...");
-          try {
-            await bootstrapInitialExpenses();
-            return;
-          } catch (e) {
-            console.warn("Bootstrap pengeluaran gagal:", e);
-          }
+          bootstrapInitialExpenses().catch((err) => {
+            console.warn("Auto-bootstrap initial expenses failed:", err);
+          });
+          onData(INITIAL_EXPENSES);
+          return;
         }
 
         const items: ExpenseRecord[] = [];
@@ -454,6 +454,51 @@ export async function updateDailyRecord(record: DailyRecord): Promise<void> {
 // 4. RESET & IMPORT DATA CLOUD FIRESTORE
 // ==========================================
 
+export async function clearAllDemoDataFirestore(): Promise<{ deletedDaily: number; deletedExpenses: number }> {
+  let deletedDaily = 0;
+  let deletedExpenses = 0;
+
+  // 1. Bersihkan catatan harian TBS uji coba
+  const dailySnap = await getDocs(dailyRecordsCollection);
+  if (!dailySnap.empty) {
+    const batch = writeBatch(db);
+    dailySnap.forEach((d) => {
+      const data = d.data();
+      if (
+        data.notes?.includes('PKS Inti') ||
+        data.notes?.includes('Buah Matang') ||
+        data.notes?.includes('Plasma') ||
+        data.driverName === 'Anton' ||
+        data.driverName === 'Bambang' ||
+        data.driverName === 'Suryanto'
+      ) {
+        batch.delete(d.ref);
+        deletedDaily++;
+      }
+    });
+    if (deletedDaily > 0) {
+      await batch.commit();
+    }
+  }
+
+  // 2. Bersihkan catatan pengeluaran contoh
+  const expSnap = await getDocs(expensesCollection);
+  if (!expSnap.empty) {
+    const batch = writeBatch(db);
+    expSnap.forEach((d) => {
+      if (d.id.startsWith('exp-') || d.data().createdByName === 'Sistem Default') {
+        batch.delete(d.ref);
+        deletedExpenses++;
+      }
+    });
+    if (deletedExpenses > 0) {
+      await batch.commit();
+    }
+  }
+
+  return { deletedDaily, deletedExpenses };
+}
+
 export async function resetAllFirestoreData(): Promise<{ trucks: TruckUnit[]; expenses: ExpenseRecord[] }> {
   // 1. Bersihkan seluruh data lama
   const existingTrucksSnap = await getDocs(trucksCollection);
@@ -464,7 +509,7 @@ export async function resetAllFirestoreData(): Promise<{ trucks: TruckUnit[]; ex
   existingExpSnap.forEach((d) => cleanBatch.delete(d.ref));
   await cleanBatch.commit();
 
-  // 2. Isi ulang armada dan pengeluaran default
+  // 2. Isi ulang profil unit armada resmi dan data contoh biaya
   await bootstrapInitialTrucks();
   await bootstrapInitialExpenses();
 

@@ -43,7 +43,7 @@ export interface ExpenseRecord {
   amount: number; // in IDR
   vendor: string; // Bengkel, SPBU, Toko Sparepart, etc.
   invoiceNumber?: string;
-  createdAt: string;
+  createdAt?: string;
   createdBy?: string;
   createdByName?: string;
   updatedBy?: string;
