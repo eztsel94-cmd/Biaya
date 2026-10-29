@@ -1,4 +1,5 @@
 import { ExpenseRecord, TruckUnit } from '../types/truck';
+import * as XLSX from 'xlsx';
 
 export function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -26,6 +27,29 @@ export function formatDateIndo(dateStr: string, format: 'short' | 'long' = 'shor
   } catch {
     return dateStr;
   }
+}
+
+export function exportExpensesToExcel(expenses: ExpenseRecord[], trucks: TruckUnit[]): void {
+  const truckMap = new Map(trucks.map(t => [t.id, t]));
+  const data = expenses.map(e => {
+    const truck = truckMap.get(e.truckId);
+    return {
+      'Tanggal': e.date,
+      'Kode Unit': truck?.code || '-',
+      'Nomor Polisi': truck?.plateNumber || '-',
+      'Supir': truck?.driverName || '-',
+      'Kategori Biaya': e.category,
+      'Keterangan': e.description,
+      'Nominal Biaya (IDR)': e.amount,
+      'Vendor / Bengkel / SPBU': e.vendor,
+      'No Nota / Kuitansi': e.invoiceNumber || '-',
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan_Biaya_TBS');
+  XLSX.writeFile(wb, `Laporan_Biaya_Truk_TBS_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
 export function exportExpensesToCSV(expenses: ExpenseRecord[], trucks: TruckUnit[]): void {

@@ -31,13 +31,59 @@ export interface UnitCostBreakdown {
 
 /**
  * Intelligent categorization based on keywords in text
- * Supports 5 core categories: Sparepart, Oli, Minyak (Solar), Mekanik, Supir
+ * Supports categories: Sparepart, Oli, Minyak, Mekanik, Supir, Tunjangan BPJS, Tunjangan Jamsostek, Potongan Mangkir
  */
 export function detectCategory(text: string): ExpenseCategory {
   if (!text) return 'Sparepart';
   const lower = text.toLowerCase().trim();
 
-  // 1. Minyak / BBM / Solar
+  // 1. Tunjangan BPJS (Ketenagakerjaan / Kesehatan)
+  if (
+    lower.includes('tunjangan bpjs') ||
+    lower.includes('bpjs') ||
+    lower.includes('bpjstk') ||
+    lower.includes('bpjs-tk') ||
+    lower.includes('bpjs ketenagakerjaan') ||
+    lower.includes('bpjs kesehatan') ||
+    lower.includes('iuran bpjs') ||
+    lower.includes('premi bpjs')
+  ) {
+    return 'Tunjangan BPJS';
+  }
+
+  // 2. Tunjangan Jamsostek (Asuransi Tenaga Kerja Supir)
+  if (
+    lower.includes('tunjangan jamsostek') ||
+    lower.includes('jamsostek') ||
+    lower.includes('astek') ||
+    lower.includes('jamsotek') ||
+    lower.includes('asuransi tenaga kerja') ||
+    lower.includes('asuransi supir') ||
+    lower.includes('asuransi sopir') ||
+    lower.includes('jaminan sosial') ||
+    lower.includes('jkk') ||
+    lower.includes('jkm')
+  ) {
+    return 'Tunjangan Jamsostek';
+  }
+
+  // 3. Potongan Mangkir (Denda / Absensi / Tidak Hadir)
+  if (
+    lower.includes('potongan mangkir') ||
+    lower.includes('potong mangkir') ||
+    lower.includes('mangkir') ||
+    lower.includes('denda mangkir') ||
+    lower.includes('potongan absen') ||
+    lower.includes('potong absen') ||
+    lower.includes('alpa') ||
+    lower.includes('tidak masuk') ||
+    lower.includes('bolos') ||
+    lower.includes('denda supir')
+  ) {
+    return 'Potongan Mangkir';
+  }
+
+  // 4. Minyak / BBM / Solar
   if (
     lower.includes('solar') ||
     lower.includes('biosolar') ||
@@ -560,6 +606,12 @@ function cleanExpenseDescription(line: string, category: ExpenseCategory): strin
         return 'Penggantian Oli & Pelumas';
       case 'Supir':
         return 'Upah Ritase & Uang Jalan Supir';
+      case 'Tunjangan BPJS':
+        return 'Tunjangan BPJS Ketenagakerjaan / Kesehatan';
+      case 'Tunjangan Jamsostek':
+        return 'Tunjangan Premi Asuransi Jamsostek Supir';
+      case 'Potongan Mangkir':
+        return 'Potongan Mangkir / Absensi Supir';
       default:
         return 'Biaya Operasional Truk TBS';
     }
@@ -597,6 +649,12 @@ function extractVendorFromText(line: string, category: ExpenseCategory): string 
       return 'Bengkel Servis Berkah Truk';
     case 'Supir':
       return 'Kasbon Operasional Kasir Kebun';
+    case 'Tunjangan BPJS':
+      return 'BPJS Ketenagakerjaan KC Rokan Hulu';
+    case 'Tunjangan Jamsostek':
+      return 'Jamsostek Tenaga Kerja Sawit';
+    case 'Potongan Mangkir':
+      return 'Bagian Personalia & Kasir Kebun';
     case 'Sparepart':
     default:
       return 'Toko Sparepart Mitra Mandiri';

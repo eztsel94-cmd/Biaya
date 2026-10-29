@@ -3,7 +3,10 @@ export type ExpenseCategory =
   | 'Oli'
   | 'Minyak'
   | 'Mekanik'
-  | 'Supir';
+  | 'Supir'
+  | 'Tunjangan BPJS'
+  | 'Tunjangan Jamsostek'
+  | 'Potongan Mangkir';
 
 export type TruckStatus = 'Aktif' | 'Perawatan' | 'Standby';
 

@@ -28,6 +28,10 @@ import {
   FileText,
   AlertCircle,
   Sparkles,
+  ShieldCheck,
+  HeartHandshake,
+  UserX,
+  Layers,
 } from 'lucide-react';
 
 interface DriverPortalViewProps {
@@ -137,6 +141,14 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
         return <Wrench className="w-3.5 h-3.5" />;
       case 'Supir':
         return <UserCheck className="w-3.5 h-3.5" />;
+      case 'Tunjangan BPJS':
+        return <ShieldCheck className="w-3.5 h-3.5" />;
+      case 'Tunjangan Jamsostek':
+        return <HeartHandshake className="w-3.5 h-3.5" />;
+      case 'Potongan Mangkir':
+        return <UserX className="w-3.5 h-3.5" />;
+      default:
+        return <Layers className="w-3.5 h-3.5" />;
     }
   };
 

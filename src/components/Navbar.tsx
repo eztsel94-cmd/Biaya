@@ -48,19 +48,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   TBS Truk
                 </span>
                 <span
-                  title={isRealtimeConnected ? "Tersambung ke Database Cloud. Perubahan data langsung tersinkronisasi antar user." : "Menghubungkan ke Cloud..."}
-                  className={`hidden lg:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                    isRealtimeConnected
-                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40 animate-pulse'
-                  }`}
+                  title="Penyimpanan Browser (localStorage) & Auto-Save Aktif. Data tersimpan permanen tanpa perlu database cloud."
+                  className="hidden lg:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-950/80 text-emerald-300 border-emerald-500/40"
                 >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isRealtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                    }`}
-                  />
-                  <span>{isRealtimeConnected ? 'Cloud Live Sync' : 'Connecting...'}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Auto-Save (localStorage)</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 hidden sm:block">
@@ -149,7 +141,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <>
                 <button
                   onClick={onOpenExcelImport}
-                  title="Tempel tulisan apapun / catatan DT 90 - Otomatis memilah nomor DT, Solar, Sparepart, Mekanik, Oli, Supir"
+                  title="Tempel tulisan apapun / catatan DT 90 - Otomatis memilah nomor DT, Solar, Sparepart, Mekanik, Oli, Supir, BPJS, Jamsostek, Potongan Mangkir"
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border border-emerald-500/40 hover:border-emerald-500 transition shadow-sm"
                 >
                   <ClipboardPaste className="w-4 h-4 text-emerald-400" />

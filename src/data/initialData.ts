@@ -252,6 +252,39 @@ export const INITIAL_EXPENSES: ExpenseRecord[] = [
     invoiceNumber: 'SPBU-011026-02',
     createdAt: '2026-10-01T08:15:00Z',
   },
+  {
+    id: 'exp-20',
+    date: '2026-10-26',
+    truckId: 'truck-2', // Unit 90
+    category: 'Tunjangan BPJS',
+    description: 'Tunjangan BPJS Ketenagakerjaan Supir Unit 90 (Agus Supriyadi)',
+    amount: 175000,
+    vendor: 'BPJS Ketenagakerjaan KC Rokan Hulu',
+    invoiceNumber: 'BPJS-1026-90',
+    createdAt: '2026-10-26T08:00:00Z',
+  },
+  {
+    id: 'exp-21',
+    date: '2026-10-25',
+    truckId: 'truck-1', // Unit 01
+    category: 'Tunjangan Jamsostek',
+    description: 'Tunjangan Premi Jamsostek Perlindungan Tenaga Kerja Supir Unit 01 (Budi Santoso)',
+    amount: 150000,
+    vendor: 'Jamsostek Tenaga Kerja Sawit',
+    invoiceNumber: 'JAM-1025-01',
+    createdAt: '2026-10-25T09:30:00Z',
+  },
+  {
+    id: 'exp-22',
+    date: '2026-10-24',
+    truckId: 'truck-3', // Unit 03
+    category: 'Potongan Mangkir',
+    description: 'Potongan mangkir supir tidak hadir 1 hari kerja angkut TBS blok C',
+    amount: 125000,
+    vendor: 'Bagian Personalia & Kasir Kebun',
+    invoiceNumber: 'POT-MGK-2410',
+    createdAt: '2026-10-24T16:00:00Z',
+  },
 ];
 
 export const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string; bar: string }> = {
@@ -285,6 +318,24 @@ export const CATEGORY_COLORS: Record<string, { bg: string; text: string; border:
     border: 'border-orange-500/30',
     bar: 'bg-orange-500',
   },
+  'Tunjangan BPJS': {
+    bg: 'bg-sky-500/10',
+    text: 'text-sky-400',
+    border: 'border-sky-500/30',
+    bar: 'bg-sky-500',
+  },
+  'Tunjangan Jamsostek': {
+    bg: 'bg-indigo-500/10',
+    text: 'text-indigo-400',
+    border: 'border-indigo-500/30',
+    bar: 'bg-indigo-500',
+  },
+  'Potongan Mangkir': {
+    bg: 'bg-rose-500/10',
+    text: 'text-rose-400',
+    border: 'border-rose-500/30',
+    bar: 'bg-rose-500',
+  },
 };
 
 export const CATEGORIES = [
@@ -293,5 +344,9 @@ export const CATEGORIES = [
   'Minyak',
   'Mekanik',
   'Supir',
+  'Tunjangan BPJS',
+  'Tunjangan Jamsostek',
+  'Potongan Mangkir',
 ] as const;
+
 

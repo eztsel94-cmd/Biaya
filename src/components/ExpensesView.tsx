@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory, FilterOptions, AppUser } from '../types/truck';
-import { formatRupiah, formatNumber, formatDateIndo, exportExpensesToCSV } from '../utils/formatters';
+import { formatRupiah, formatNumber, formatDateIndo, exportExpensesToCSV, exportExpensesToExcel } from '../utils/formatters';
 import { CATEGORIES, CATEGORY_COLORS } from '../data/initialData';
 import {
   FileText,
@@ -208,11 +208,21 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           )}
 
           <button
+            onClick={() => exportExpensesToExcel(filteredExpenses, trucks)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs sm:text-sm border border-emerald-600 transition shadow-sm"
+            title="Unduh laporan dalam format Microsoft Excel (.xlsx)"
+          >
+            <Download className="w-4 h-4" />
+            <span>Ekspor Excel (.xlsx)</span>
+          </button>
+
+          <button
             onClick={() => exportExpensesToCSV(filteredExpenses, trucks)}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold text-xs sm:text-sm border border-slate-700 transition"
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold text-xs sm:text-sm border border-slate-700 transition"
+            title="Unduh laporan dalam format CSV"
           >
             <Download className="w-4 h-4 text-emerald-400" />
-            Ekspor CSV ({filteredExpenses.length})
+            <span>CSV</span>
           </button>
         </div>
       </div>
@@ -444,7 +454,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               onChange={(e) => setSelectedCategoryFilter(e.target.value)}
               className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-emerald-500"
             >
-              <option value="all">Semua Kategori (5)</option>
+              <option value="all">Semua Kategori ({CATEGORIES.length})</option>
               {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}

@@ -18,6 +18,9 @@ import {
   Calculator,
   ArrowRight,
   Sparkles,
+  ShieldCheck,
+  HeartHandshake,
+  UserX,
   PlusCircle,
   Truck,
 } from 'lucide-react';
@@ -121,6 +124,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 - Bio solar 120 liter 850.000 SPBU Pasir Pengaraian
 - Ganti kampas rem depan Bendix 450rb Toko Mandiri
 - Ongkos mekanik las & stel rem 200.000 Bengkel Berkah
+- Tunjangan BPJS Ketenagakerjaan supir 175.000
+- Tunjangan Jamsostek supir 150rb
+- Potongan mangkir supir 1 hari 125.000
 - Upah supir Agus trip afdeling 2 450.000
 - Kuras oli mesin Meditran SX4 580rb Toko Nusantara`;
 
@@ -144,11 +150,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 DT 90
 - BioSolar 110 liter 748.000 SPBU Simpang
 - Jasa tune up montir bengkel 250rb
+- Tunjangan BPJS supir Agus 175.000
+- Potongan mangkir supir 125rb
 - Upah supir ritase 450rb
 
 DT 01
 - Ban luar belakang Bridgestone 1.950.000 Toko Ban Jaya
 - Jasa stel rem 150rb
+- Tunjangan Jamsostek supir Budi 150.000
 - Uang jalan supir TBS 400rb
 
 DT 03
@@ -346,6 +355,12 @@ DT 03
         return <Droplets className="w-3.5 h-3.5" />;
       case 'Supir':
         return <UserCheck className="w-3.5 h-3.5" />;
+      case 'Tunjangan BPJS':
+        return <ShieldCheck className="w-3.5 h-3.5" />;
+      case 'Tunjangan Jamsostek':
+        return <HeartHandshake className="w-3.5 h-3.5" />;
+      case 'Potongan Mangkir':
+        return <UserX className="w-3.5 h-3.5" />;
       default:
         return <Layers className="w-3.5 h-3.5" />;
     }
@@ -379,6 +394,33 @@ DT 03
         'Nominal Biaya': 200000,
         'Vendor': 'Bengkel Servis Berkah Truk',
         'No Invoice': 'BSB-1028',
+      },
+      {
+        'Tanggal': '2026-10-28',
+        'Unit Truk': 'DT 90',
+        'Kategori': 'Tunjangan BPJS',
+        'Keterangan': 'Tunjangan Iuran BPJS Ketenagakerjaan Supir',
+        'Nominal Biaya': 175000,
+        'Vendor': 'BPJS Ketenagakerjaan KC Rokan Hulu',
+        'No Invoice': 'BPJS-1028-90',
+      },
+      {
+        'Tanggal': '2026-10-28',
+        'Unit Truk': 'DT 90',
+        'Kategori': 'Tunjangan Jamsostek',
+        'Keterangan': 'Tunjangan Premi Asuransi Jamsostek Supir',
+        'Nominal Biaya': 150000,
+        'Vendor': 'Jamsostek Tenaga Kerja Sawit',
+        'No Invoice': 'JAM-1028',
+      },
+      {
+        'Tanggal': '2026-10-28',
+        'Unit Truk': 'DT 90',
+        'Kategori': 'Potongan Mangkir',
+        'Keterangan': 'Potongan mangkir supir 1 hari kerja',
+        'Nominal Biaya': 125000,
+        'Vendor': 'Kasir / Bagian Personalia',
+        'No Invoice': 'POT-MGK-28',
       },
       {
         'Tanggal': '2026-10-28',
@@ -425,7 +467,7 @@ DT 03
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Tempel tulisan bebas, catatan WA, atau tabel Excel. Sistem otomatis memilah nomor DT (misal: DT 90), nominal biaya, dan kategori (Solar, Sparepart, Mekanik, Oli, Supir).
+                Tempel tulisan bebas, catatan WA, atau tabel Excel. Sistem otomatis memilah nomor DT (misal: DT 90), nominal biaya, dan kategori (Solar, Sparepart, Mekanik, Oli, Supir, Tunjangan BPJS, Tunjangan Jamsostek, Potongan Mangkir).
               </p>
             </div>
           </div>
@@ -555,7 +597,7 @@ DT 03
                   rows={6}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder={`Tempel tulisan atau catatan biaya apapun di sini. Contoh:\n\nDT 90\n- Bio solar 100 liter 850.000 SPBU Pasir\n- Kampas rem depan bendix 450rb\n- Ongkos montir bengkel las 200rb\n- Upah supir ritase afdeling 2 450.000\n- Ganti oli mesin meditran 550rb\n\nDT 01:\nIsi biosolar 700.000\nGanti ban luar bridgestone 1.950.000`}
+                  placeholder={`Tempel tulisan atau catatan biaya apapun di sini. Contoh:\n\nDT 90\n- Bio solar 100 liter 850.000 SPBU Pasir\n- Kampas rem depan bendix 450rb\n- Ongkos montir bengkel las 200rb\n- Tunjangan BPJS supir 175.000\n- Tunjangan Jamsostek supir 150rb\n- Potongan mangkir 1 hari 125.000\n- Upah supir ritase afdeling 2 450.000\n- Ganti oli mesin meditran 550rb\n\nDT 01:\nIsi biosolar 700.000\nGanti ban luar bridgestone 1.950.000`}
                   className="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3.5 font-mono text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition resize-y leading-relaxed"
                 />
               </div>

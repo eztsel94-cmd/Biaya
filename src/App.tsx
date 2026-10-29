@@ -16,7 +16,14 @@ import { ExcelImportModal } from './components/ExcelImportModal';
 import { UserRoleModal } from './components/UserRoleModal';
 import { DriverPortalView } from './components/DriverPortalView';
 import { findTruckFromUrlQuery } from './utils/driverLink';
-import { api, CLIENT_AUTHOR_ID, RealtimeEventData, getCurrentUser, setCurrentUser } from './services/api';
+import {
+  api,
+  CLIENT_AUTHOR_ID,
+  RealtimeEventData,
+  getCurrentUser,
+  setCurrentUser,
+  subscribeToEvents,
+} from './services/api';
 import {
   Truck,
   RotateCcw,
@@ -47,18 +54,16 @@ export default function App() {
 
   // Active User & RBAC state
   const [currentUser, setActiveUser] = useState<AppUser>(() => getCurrentUser());
-  const [availableUsers, setAvailableUsers] = useState<AppUser[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<AppUser[]>(() => api.getInitialUsers());
 
-  // Real-time synchronization state
-  const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(false);
+  // Real-time synchronization state (localStorage & multi-tab)
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(true);
   const [liveNotification, setLiveNotification] = useState<{ message: string; isRemote: boolean } | null>(null);
 
-  // App data state
-  const [trucks, setTrucks] = useState<TruckUnit[]>(INITIAL_TRUCKS);
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>(INITIAL_EXPENSES);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  const eventSourceRef = useRef<EventSource | null>(null);
+  // App data state - loaded directly from browser localStorage (zero delay, permanent)
+  const [trucks, setTrucks] = useState<TruckUnit[]>(() => api.getInitialTrucks());
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>(() => api.getInitialExpenses());
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const notify = (message: string, isRemote = false) => {
     setLiveNotification({ message, isRemote });
@@ -67,11 +72,11 @@ export default function App() {
     }, 4500);
   };
 
-  // 1. Initial Load & Real-time SSE Connection
+  // 1. Initial Load & Multi-tab sync via BroadcastChannel / storage events
   useEffect(() => {
     let isMounted = true;
 
-    // Fetch system users & roles
+    // Refresh users from storage
     api
       .getSystemUsers()
       .then((users) => {
@@ -82,7 +87,7 @@ export default function App() {
         console.warn('Gagal memuat user sistem:', err);
       });
 
-    // Fetch initial state from cloud database
+    // Refresh data from storage
     api
       .getData()
       .then((data) => {
@@ -96,162 +101,137 @@ export default function App() {
         setIsLoading(false);
       })
       .catch((err) => {
-        console.warn('Fallback to local default data while connecting to server:', err);
+        console.warn('Gagal memuat data dari localStorage:', err);
         setIsLoading(false);
       });
 
-    // Setup Server-Sent Events (SSE) listener
-    function connectSSE() {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+    // Subscribe to multi-tab real-time events
+    const unsubscribe = subscribeToEvents((data: RealtimeEventData) => {
+      if (!isMounted) return;
+      const isRemote = Boolean(data.authorId && data.authorId !== CLIENT_AUTHOR_ID);
 
-      const sse = new EventSource('/api/events');
-      eventSourceRef.current = sse;
+      switch (data.type) {
+        case 'INIT':
+          if (data.payload?.trucks) setTrucks(data.payload.trucks);
+          if (data.payload?.expenses) setExpenses(data.payload.expenses);
+          break;
 
-      sse.onopen = () => {
-        if (!isMounted) return;
-        setIsRealtimeConnected(true);
-      };
-
-      sse.onmessage = (event) => {
-        if (!isMounted) return;
-        try {
-          const data: RealtimeEventData = JSON.parse(event.data);
-          const isRemote = Boolean(data.authorId && data.authorId !== CLIENT_AUTHOR_ID);
-
-          switch (data.type) {
-            case 'INIT':
-              if (data.payload?.trucks) setTrucks(data.payload.trucks);
-              if (data.payload?.expenses) setExpenses(data.payload.expenses);
-              break;
-
-            case 'EXPENSE_ADDED':
-              setExpenses((prev) => {
-                const exists = prev.some((e) => e.id === data.payload.id);
-                if (exists) return prev;
-                return [data.payload, ...prev];
-              });
-              if (isRemote) {
-                notify(
-                  `User lain menambahkan biaya baru: "${data.payload.description}" (Rp ${data.payload.amount?.toLocaleString('id-ID')})`,
-                  true
-                );
-              }
-              break;
-
-            case 'EXPENSES_BATCH_ADDED':
-              if (Array.isArray(data.payload?.expenses)) {
-                setExpenses((prev) => {
-                  const existingIds = new Set(prev.map((e) => e.id));
-                  const newItems = data.payload.expenses.filter((e: any) => !existingIds.has(e.id));
-                  return [...newItems, ...prev];
-                });
-                if (isRemote) {
-                  notify(
-                    `${data.payload.authorName || 'User lain'} mengimpor ${data.payload.count || data.payload.expenses.length} data biaya dari Excel!`,
-                    true
-                  );
-                }
-              }
-              break;
-
-            case 'EXPENSE_UPDATED':
-              setExpenses((prev) =>
-                prev.map((e) => (e.id === data.payload.id ? data.payload : e))
-              );
-              if (isRemote) {
-                notify(`Catatan biaya diperbarui secara real-time oleh pengguna lain.`, true);
-              }
-              break;
-
-            case 'EXPENSE_DELETED':
-              setExpenses((prev) => prev.filter((e) => e.id !== data.payload.id));
-              if (isRemote) {
-                notify(`Catatan biaya dihapus oleh pengguna lain.`, true);
-              }
-              break;
-
-            case 'TRUCK_ADDED':
-              setTrucks((prev) => {
-                const exists = prev.some((t) => t.id === data.payload.id);
-                if (exists) return prev;
-                return [...prev, data.payload];
-              });
-              if (isRemote) {
-                notify(`Unit truk baru (${data.payload.code}) ditambahkan oleh pengguna lain!`, true);
-              }
-              break;
-
-            case 'TRUCK_UPDATED':
-              setTrucks((prev) =>
-                prev.map((t) => (t.id === data.payload.id ? data.payload : t))
-              );
-              if (isRemote) {
-                notify(`Informasi armada truk diperbarui secara real-time.`, true);
-              }
-              break;
-
-            case 'TRUCK_DELETED':
-              setTrucks((prev) => prev.filter((t) => t.id !== data.payload.id));
-              if (isRemote) {
-                notify(`Unit truk telah dihapus oleh pengguna lain.`, true);
-              }
-              break;
-
-            case 'DATABASE_RESET':
-              setTrucks(data.payload.trucks || []);
-              setExpenses(data.payload.expenses || []);
-              if (isRemote) {
-                notify(`Database telah di-reset ke 3 unit default oleh administrator.`, true);
-              }
-              break;
-
-            case 'DATABASE_IMPORTED':
-              if (data.payload.trucks) setTrucks(data.payload.trucks);
-              if (data.payload.expenses) setExpenses(data.payload.expenses);
-              if (isRemote) {
-                notify(`Database diperbarui dari file backup oleh pengguna lain.`, true);
-              }
-              break;
-
-            case 'USERS_UPDATED':
-            case 'USER_ROLE_UPDATED':
-              if (Array.isArray(data.payload?.users)) {
-                setAvailableUsers(data.payload.users);
-                const me = data.payload.users.find((u: AppUser) => u.id === currentUser.id);
-                if (me) {
-                  setActiveUser(me);
-                  setCurrentUser(me);
-                }
-              }
-              if (isRemote && data.payload?.user) {
-                notify(`Hak akses user ${data.payload.user.name} diperbarui oleh Admin.`, true);
-              }
-              break;
+        case 'EXPENSE_ADDED':
+          setExpenses((prev) => {
+            const exists = prev.some((e) => e.id === data.payload.id);
+            if (exists) return prev;
+            return [data.payload, ...prev];
+          });
+          if (isRemote) {
+            notify(
+              `User lain menambahkan biaya baru: "${data.payload.description}" (Rp ${data.payload.amount?.toLocaleString('id-ID')})`,
+              true
+            );
           }
-        } catch (err) {
-          console.error('Error parsing SSE event:', err);
-        }
-      };
+          break;
 
-      sse.onerror = () => {
-        if (!isMounted) return;
-        setIsRealtimeConnected(false);
-        // Retry connection after 4 seconds
-        setTimeout(() => {
-          if (isMounted) connectSSE();
-        }, 4000);
-      };
-    }
+        case 'EXPENSES_BATCH_ADDED':
+          if (Array.isArray(data.payload?.expenses)) {
+            setExpenses((prev) => {
+              const existingIds = new Set(prev.map((e) => e.id));
+              const newItems = data.payload.expenses.filter((e: any) => !existingIds.has(e.id));
+              return [...newItems, ...prev];
+            });
+            if (isRemote) {
+              notify(
+                `${data.payload.authorName || 'User lain'} mengimpor ${data.payload.count || data.payload.expenses.length} data biaya dari Excel!`,
+                true
+              );
+            }
+          }
+          break;
 
-    connectSSE();
+        case 'EXPENSE_UPDATED':
+          setExpenses((prev) =>
+            prev.map((e) => (e.id === data.payload.id ? data.payload : e))
+          );
+          if (isRemote) {
+            notify(`Catatan biaya diperbarui secara real-time oleh pengguna lain.`, true);
+          }
+          break;
+
+        case 'EXPENSE_DELETED':
+          setExpenses((prev) => prev.filter((e) => e.id !== data.payload.id));
+          if (isRemote) {
+            notify(`Catatan biaya dihapus oleh pengguna lain.`, true);
+          }
+          break;
+
+        case 'TRUCK_ADDED':
+          setTrucks((prev) => {
+            const exists = prev.some((t) => t.id === data.payload.id);
+            if (exists) return prev;
+            return [...prev, data.payload];
+          });
+          if (isRemote) {
+            notify(`Unit truk baru (${data.payload.code}) ditambahkan oleh pengguna lain!`, true);
+          }
+          break;
+
+        case 'TRUCK_UPDATED':
+          if (data.payload?.trucks && Array.isArray(data.payload.trucks)) {
+            setTrucks(data.payload.trucks);
+          } else if (data.payload?.id) {
+            setTrucks((prev) =>
+              prev.map((t) => (t.id === data.payload.id ? data.payload : t))
+            );
+          }
+          if (isRemote) {
+            notify(`Informasi armada truk diperbarui secara real-time.`, true);
+          }
+          break;
+
+        case 'TRUCK_DELETED':
+          setTrucks((prev) => prev.filter((t) => t.id !== data.payload.id));
+          if (data.payload?.deleteRelated) {
+            setExpenses((prev) => prev.filter((e) => e.truckId !== data.payload.id));
+          }
+          if (isRemote) {
+            notify(`Unit truk telah dihapus oleh pengguna lain.`, true);
+          }
+          break;
+
+        case 'DATABASE_RESET':
+          setTrucks(data.payload.trucks || []);
+          setExpenses(data.payload.expenses || []);
+          if (isRemote) {
+            notify(`Database telah di-reset ke 3 unit default oleh administrator.`, true);
+          }
+          break;
+
+        case 'DATABASE_IMPORTED':
+          if (data.payload.trucks) setTrucks(data.payload.trucks);
+          if (data.payload.expenses) setExpenses(data.payload.expenses);
+          if (isRemote) {
+            notify(`Database diperbarui dari file backup oleh pengguna lain.`, true);
+          }
+          break;
+
+        case 'USERS_UPDATED':
+        case 'USER_ROLE_UPDATED':
+          if (Array.isArray(data.payload?.users)) {
+            setAvailableUsers(data.payload.users);
+            const me = data.payload.users.find((u: AppUser) => u.id === currentUser.id);
+            if (me) {
+              setActiveUser(me);
+              setCurrentUser(me);
+            }
+          }
+          if (isRemote && data.payload?.user) {
+            notify(`Hak akses user ${data.payload.user.name} diperbarui oleh Admin.`, true);
+          }
+          break;
+      }
+    });
 
     return () => {
       isMounted = false;
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
+      unsubscribe();
     };
   }, []);
 
@@ -293,10 +273,10 @@ export default function App() {
         if (already) return prev;
         return [created, ...prev];
       });
-      notify('Catatan pengeluaran berhasil disimpan ke cloud database.');
+      notify('Catatan pengeluaran berhasil disimpan secara permanen di browser (localStorage).');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Gagal menyimpan pengeluaran ke server');
+      notify(err.message || 'Gagal menyimpan pengeluaran');
     }
   };
 
@@ -308,7 +288,7 @@ export default function App() {
         const newItems = created.filter((e) => !existingIds.has(e.id));
         return [...newItems, ...prev];
       });
-      notify(`Berhasil mengimpor & mengelompokkan ${created.length} data biaya ke cloud database!`);
+      notify(`Berhasil mengimpor & menyimpan ${created.length} data biaya ke browser (localStorage)!`);
     } catch (err: any) {
       console.error(err);
       notify(err.message || 'Gagal mengimpor batch data pengeluaran');
@@ -323,7 +303,7 @@ export default function App() {
       notify('Catatan biaya berhasil diperbarui.');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Akses Ditolak: Hanya Admin yang berhak merubah data biaya!');
+      notify(err.message || 'Gagal merubah data biaya');
     }
   };
 
@@ -331,10 +311,10 @@ export default function App() {
     try {
       await api.deleteExpense(expenseId);
       setExpenses((prev) => prev.filter((e) => e.id !== expenseId));
-      notify('Catatan biaya berhasil dihapus.');
+      notify('Catatan biaya berhasil dihapus secara permanen.');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Akses Ditolak: Hanya Admin yang berhak menghapus data biaya!');
+      notify(err.message || 'Gagal menghapus data biaya');
     }
   };
 
@@ -350,11 +330,11 @@ export default function App() {
         if (already) return prev;
         return [...prev, created];
       });
-      notify(`Unit ${created.code} (${created.plateNumber}) berhasil ditambahkan.`);
+      notify(`Unit ${created.code} (${created.plateNumber}) berhasil ditambahkan dan disimpan permanen.`);
       return created;
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Gagal menambahkan unit ke server');
+      notify(err.message || 'Gagal menambahkan unit truk');
       throw err;
     }
   };
@@ -366,7 +346,7 @@ export default function App() {
       notify(`Unit ${saved.code} (${saved.plateNumber}) berhasil diperbarui.`);
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Gagal memperbarui unit ke server');
+      notify(err.message || 'Gagal memperbarui unit');
     }
   };
 
@@ -377,10 +357,10 @@ export default function App() {
       if (deleteRelated) {
         setExpenses((prev) => prev.filter((e) => e.truckId !== truckId));
       }
-      notify('Unit truk berhasil dihapus.');
+      notify('Unit truk berhasil dihapus secara permanen dari penyimpanan.');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Gagal menghapus unit di server');
+      notify(err.message || 'Gagal menghapus unit truk');
     }
   };
 
@@ -389,10 +369,10 @@ export default function App() {
       const res = await api.resetData();
       setTrucks(res.trucks);
       setExpenses(res.expenses);
-      notify('Database berhasil di-reset kembali ke 3 Unit Armada Default (Unit 01, Unit 90, Unit 03).');
+      notify('Data berhasil di-reset kembali ke 3 Unit Armada Default (Unit 01, Unit 90, Unit 03).');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Akses Ditolak: Hanya Admin yang berhak mereset database');
+      notify(err.message || 'Gagal mereset data');
     }
   };
 
@@ -563,10 +543,8 @@ export default function App() {
               }`}
             />
             <span className="text-slate-300">
-              <strong className="text-white">Database Cloud Real-Time:</strong>{' '}
-              {isRealtimeConnected
-                ? 'Terhubung secara langsung. Ketika ada user lain menambah atau merubah data di halaman ini, tampilan Anda akan terupdate otomatis tanpa reload!'
-                : 'Sedang menghubungkan ke server cloud...'}
+              <strong className="text-white">Penyimpanan Browser (localStorage):</strong>{' '}
+              Data tersimpan otomatis secara permanen di browser Anda. Fitur hapus unit & catatan biaya bekerja langsung tanpa database cloud, siap digunakan di Vercel!
             </span>
           </div>
           <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
@@ -602,6 +580,8 @@ export default function App() {
             onOpenDataManager={() => setIsDataManagerOpen(true)}
             onNavigateToExpensesWithFilter={handleNavigateToExpensesWithTruck}
             onOpenDriverPortal={(truckId) => setDriverPortalTruckId(truckId)}
+            onOpenExcelImport={handleOpenExcelImport}
+            onDeleteTruck={handleDeleteTruck}
           />
         )}
 

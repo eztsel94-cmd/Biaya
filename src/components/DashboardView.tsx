@@ -18,6 +18,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  ShieldCheck,
+  HeartHandshake,
+  UserX,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -98,6 +101,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         return <Wrench className="w-4 h-4" />;
       case 'Supir':
         return <UserCheck className="w-4 h-4" />;
+      case 'Tunjangan BPJS':
+        return <ShieldCheck className="w-4 h-4" />;
+      case 'Tunjangan Jamsostek':
+        return <HeartHandshake className="w-4 h-4" />;
+      case 'Potongan Mangkir':
+        return <UserX className="w-4 h-4" />;
       default:
         return <Layers className="w-4 h-4" />;
     }
@@ -238,7 +247,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Rincian Biaya per Kategori Operasional
             </h2>
             <p className="text-xs text-slate-400">
-              Alokasi pengeluaran untuk 5 pos biaya: Sparepart, Oli, Solar (Minyak), Jasa Mekanik, dan Upah Supir
+              Alokasi pengeluaran untuk 8 pos biaya: Sparepart, Oli, Solar, Mekanik, Supir, Tunjangan BPJS, Tunjangan Jamsostek, dan Potongan Mangkir
             </p>
           </div>
           <button
@@ -250,7 +259,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Category Cards with progress bars */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {CATEGORIES.map((cat) => {
             const data = categoryTotals[cat];
             const colors = CATEGORY_COLORS[cat];

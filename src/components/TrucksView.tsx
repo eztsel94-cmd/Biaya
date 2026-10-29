@@ -27,6 +27,10 @@ import {
   Check,
   Share2,
   FileSpreadsheet,
+  Trash2,
+  AlertTriangle,
+  HeartHandshake,
+  UserX,
 } from 'lucide-react';
 
 interface TrucksViewProps {
@@ -37,6 +41,7 @@ interface TrucksViewProps {
   onNavigateToExpensesWithFilter: (truckId: string) => void;
   onOpenDriverPortal: (truckId: string) => void;
   onOpenExcelImport?: (truckId?: string) => void;
+  onDeleteTruck?: (truckId: string, deleteRelated: boolean) => void;
 }
 
 export const TrucksView: React.FC<TrucksViewProps> = ({
@@ -47,9 +52,12 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
   onNavigateToExpensesWithFilter,
   onOpenDriverPortal,
   onOpenExcelImport,
+  onDeleteTruck,
 }) => {
   const [selectedTruckForDetail, setSelectedTruckForDetail] = useState<TruckUnit | null>(null);
   const [copiedTruckId, setCopiedTruckId] = useState<string | null>(null);
+  const [truckToDelete, setTruckToDelete] = useState<TruckUnit | null>(null);
+  const [deleteRelated, setDeleteRelated] = useState<boolean>(true);
 
   const totalAllCost = expenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -75,6 +83,14 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
         return <Wrench className="w-3.5 h-3.5" />;
       case 'Supir':
         return <UserCheck className="w-3.5 h-3.5" />;
+      case 'Tunjangan BPJS':
+        return <ShieldCheck className="w-3.5 h-3.5" />;
+      case 'Tunjangan Jamsostek':
+        return <HeartHandshake className="w-3.5 h-3.5" />;
+      case 'Potongan Mangkir':
+        return <UserX className="w-3.5 h-3.5" />;
+      default:
+        return <Layers className="w-3.5 h-3.5" />;
     }
   };
 
@@ -292,6 +308,16 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
                     <PlusCircle className="w-3.5 h-3.5" />
                     + Biaya
                   </button>
+                  {onDeleteTruck && (
+                    <button
+                      onClick={() => setTruckToDelete(truck)}
+                      title={`Hapus Unit ${truck.code} (${truck.plateNumber})`}
+                      className="py-2 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-medium transition border border-rose-500/30 flex items-center justify-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Hapus</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* DEDICATED DRIVER PORTAL LINK BOX - Under each TBS unit card */}
@@ -481,7 +507,7 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-800 bg-slate-800/40 flex items-center justify-between">
+            <div className="p-4 border-t border-slate-800 bg-slate-800/40 flex items-center justify-between flex-wrap gap-2">
               <button
                 onClick={() => {
                   const id = selectedTruckForDetail.id;
@@ -492,11 +518,85 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
               >
                 Lihat di Halaman Catatan Biaya Lengkap <ChevronRight className="w-4 h-4" />
               </button>
+              <div className="flex items-center gap-2">
+                {onDeleteTruck && (
+                  <button
+                    onClick={() => {
+                      const trk = selectedTruckForDetail;
+                      setSelectedTruckForDetail(null);
+                      setTruckToDelete(trk);
+                    }}
+                    className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold rounded-lg border border-rose-500/30 transition flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Hapus Unit
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedTruckForDetail(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE TRUCK CONFIRMATION MODAL */}
+      {truckToDelete && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400 mb-3">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-bold text-white">
+                Hapus Unit {truckToDelete.code} ({truckToDelete.plateNumber})?
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed mb-4">
+              Anda akan menghapus unit truk ini dari armada dan penyimpanan browser (localStorage).
+              {(() => {
+                const count = expenses.filter((e) => e.truckId === truckToDelete.id).length;
+                return count > 0 ? (
+                  <span className="block mt-2 text-amber-300 font-semibold">
+                    Perhatian: Terdapat {count} catatan biaya terkait unit ini.
+                  </span>
+                ) : null;
+              })()}
+            </p>
+
+            <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 mb-5 text-xs">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteRelated}
+                  onChange={(e) => setDeleteRelated(e.target.checked)}
+                  className="mt-0.5 rounded text-emerald-500 focus:ring-0"
+                />
+                <span className="text-slate-300">
+                  Hapus juga seluruh catatan biaya yang masih menunjuk ke {truckToDelete.code} (sesuai anjuran agar total biaya tetap rapi).
+                </span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 text-xs">
               <button
-                onClick={() => setSelectedTruckForDetail(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg transition"
+                onClick={() => setTruckToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium"
               >
-                Tutup
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  if (onDeleteTruck && truckToDelete) {
+                    onDeleteTruck(truckToDelete.id, deleteRelated);
+                    setTruckToDelete(null);
+                  }
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg shadow-sm"
+              >
+                Ya, Hapus Unit
               </button>
             </div>
           </div>
