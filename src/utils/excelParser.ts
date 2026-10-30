@@ -489,18 +489,24 @@ export function parseFreeformNotes(
     let lineRawCode: string | null = null;
 
     if (lineMatchedTruck) {
-      // Baris ini secara eksplisit menyebutkan kode DT valid
+      // Baris ini secara eksplisit menyebutkan kode DT valid yang cocok dengan unit di database
       lineTruck = lineMatchedTruck;
       activeTruck = lineMatchedTruck; // perbarui konteks untuk baris-baris berikutnya
       activeRawUnitCode = null;
       detectedUnitsSet.add(lineMatchedTruck.code);
-    } else if (activeTruck) {
-      // Mengikuti header DT aktif sebelumnya
-      lineTruck = activeTruck;
     } else if (rawUnitFound) {
-      // Menulis kode DT tetapi unit tidak ditemukan di database
+      // Menulis kode DT lengkap tetapi unit tidak ditemukan/tidak cocok di database
       lineRawCode = rawUnitFound;
+      activeTruck = null;
+      activeRawUnitCode = rawUnitFound;
       unmatchedUnitsSet.add(rawUnitFound);
+    } else if (activeTruck) {
+      // Mengikuti header DT aktif sebelumnya (yang cocok)
+      lineTruck = activeTruck;
+    } else if (activeRawUnitCode) {
+      // Mengikuti header DT aktif sebelumnya (yang tidak cocok dengan unit database)
+      lineRawCode = activeRawUnitCode;
+      unmatchedUnitsSet.add(activeRawUnitCode);
     }
 
     const category = detectCategory(line);
@@ -510,9 +516,11 @@ export function parseFreeformNotes(
     const invoiceMatch = line.match(/(?:inv|nota|kwitansi|faktur|no\.?|struk)[-:\s#]*([a-zA-Z0-9\/-]+)/i);
     const invoiceNumber = invoiceMatch ? invoiceMatch[1].trim() : undefined;
 
-    // LOGIKA 1 & 2: FORMAT VALID vs PERLU PILAH MANUAL vs DT DEFAULT
+    // LOGIKA PEMILAHAN:
+    // 1. KODE COCOK DENGAN UNIT TERSEDIA -> Masuk ke Format Valid / Otomatis Cocok
+    // 2. KODE LENGKAP TAPI TIDAK ADA PERSAMAAN DI DATABASE -> JANGAN masukkan sembarangan! Masuk ke Data Tidak Cocok
+    // 3. TANPA KODE DT -> Jika DT Default ON masukkan ke default, jika OFF masuk ke Perlu Pilah Manual
     if (lineTruck) {
-      // Format Valid (Cocok): Langsung dikelompokkan ke DT yang sesuai
       items.push({
         id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         rawIndex: idx,
@@ -528,11 +536,30 @@ export function parseFreeformNotes(
         isValid: true,
         needsManualReview: false,
       });
+    } else if (lineRawCode) {
+      // KODE DT LENGKAP TAPI TIDAK COCOK DENGAN UNIT YANG TERSEDIA
+      // Tidak boleh dimasukkan sembarangan ke defaultTruck agar tidak menambah pekerjaan
+      manualItems.push({
+        id: `manual-mismatch-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        rawIndex: idx,
+        rawText: line,
+        date,
+        truckId: '',
+        truckCode: lineRawCode,
+        unrecognizedUnitCode: lineRawCode,
+        category,
+        description: cleanDesc,
+        amount,
+        vendor,
+        invoiceNumber,
+        isValid: false,
+        needsManualReview: true,
+        manualReason: `Kode unit "${lineRawCode}" terdeteksi lengkap, namun tidak ada persamaan dengan unit yang tersedia di database.`,
+      });
     } else {
-      // Format Tidak Valid / Tidak Ada Kode DT pada baris ini
+      // BARIS TIDAK MEMILIKI KODE DT SAMA SEKALI
       if (useDefaultTruck && defaultTruck) {
-        // KONDISI AKTIF (ON):
-        // Tidak disisihkan ke manual, langsung memasukkan biaya ke nomor DT default terpilih
+        // KONDISI AKTIF (ON) KHUSUS DATA TANPA KODE:
         detectedUnitsSet.add(defaultTruck.code);
         items.push({
           id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -551,15 +578,13 @@ export function parseFreeformNotes(
         });
       } else {
         // KONDISI NON-AKTIF (OFF):
-        // Murni logika otomatis. Otomatis disisihkan ke dalam daftar "Perlu Pilah Manual"
         manualItems.push({
-          id: `manual-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: `manual-nocode-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
           rawIndex: idx,
           rawText: line,
           date,
           truckId: '',
-          truckCode: lineRawCode || 'Perlu Pilah Manual',
-          unrecognizedUnitCode: lineRawCode || undefined,
+          truckCode: 'Tanpa Kode DT',
           category,
           description: cleanDesc,
           amount,
@@ -567,9 +592,7 @@ export function parseFreeformNotes(
           invoiceNumber,
           isValid: false,
           needsManualReview: true,
-          manualReason: lineRawCode
-            ? `Kode unit "${lineRawCode}" belum terdaftar di database`
-            : 'Tidak ada kode DT pada baris ini (Format tidak valid / tidak ada kode)',
+          manualReason: 'Format tidak menyebutkan kode DT sama sekali (Format tidak valid / tidak ada kode)',
         });
       }
     }
@@ -897,7 +920,28 @@ export function processRawRows(
         isValid: true,
         needsManualReview: false,
       });
+    } else if (rawUnitFound) {
+      // Kode DT terdeteksi lengkap, namun tidak ada persamaan dengan unit yang tersedia di database
+      // Jangan masukkan sembarangan ke defaultTruck!
+      manualItems.push({
+        id: `manual-table-mismatch-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        rawIndex: r,
+        rawText: rowText,
+        date,
+        truckId: '',
+        truckCode: rawUnitFound,
+        unrecognizedUnitCode: rawUnitFound,
+        category,
+        description,
+        amount,
+        vendor,
+        invoiceNumber: rawInvoice.trim() || undefined,
+        isValid: false,
+        needsManualReview: true,
+        manualReason: `Kode unit "${rawUnitFound}" terdeteksi, namun tidak cocok dengan unit yang tersedia di database.`,
+      });
     } else {
+      // Baris tabel tidak memiliki kode DT sama sekali
       if (useDefaultTruck && defaultTruck) {
         items.push({
           id: `parsed-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -916,13 +960,12 @@ export function processRawRows(
         });
       } else {
         manualItems.push({
-          id: `manual-table-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: `manual-table-nocode-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
           rawIndex: r,
           rawText: rowText,
           date,
           truckId: '',
-          truckCode: rawUnitFound || 'Perlu Pilah Manual',
-          unrecognizedUnitCode: rawUnitFound || undefined,
+          truckCode: 'Tanpa Kode DT',
           category,
           description,
           amount,
@@ -930,9 +973,7 @@ export function processRawRows(
           invoiceNumber: rawInvoice.trim() || undefined,
           isValid: false,
           needsManualReview: true,
-          manualReason: rawUnitFound
-            ? `Kode unit "${rawUnitFound}" belum terdaftar di database`
-            : 'Tidak ada kode DT pada baris tabel (Format tidak valid / tidak ada kode)',
+          manualReason: 'Tidak ada kode DT pada baris tabel (Format tidak valid / tidak ada kode)',
         });
       }
     }

@@ -74,6 +74,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [detectedUnits, setDetectedUnits] = useState<string[]>([]);
   const [unmatchedUnits, setUnmatchedUnits] = useState<string[]>([]);
   const [activeResultTab, setActiveResultTab] = useState<'valid' | 'manual'>('valid');
+  const [manualFilter, setManualFilter] = useState<'all' | 'mismatch' | 'nocode'>('all');
   const [bulkManualTruckId, setBulkManualTruckId] = useState<string>(
     defaultTruckId || trucks[0]?.id || ''
   );
@@ -191,6 +192,19 @@ DT 03:
     setErrorMessage(null);
   };
 
+  // Contoh dengan kode DT yang belum terdaftar di sistem (menguji Fitur Data Tidak Cocok)
+  const handleLoadSampleMismatchDT = () => {
+    setActiveTab('freeform');
+    setInputText(`DT 88 (Unit Belum Terdaftar di Sistem):
+- Beli ban luar dump truck Rp 2.450.000
+- Jasa pasang ban & cek rem 150.000
+
+DT 90:
+- Ganti oli mesin Meditran SX4 10 Liter 580.000
+- Servis kampas rem depan 200.000`);
+    setErrorMessage(null);
+  };
+
   // Handle file upload
   const handleFileUpload = async (file: File) => {
     setErrorMessage(null);
@@ -226,6 +240,25 @@ DT 03:
     }
   };
 
+  // Update field manual untuk baris yang tidak cocok (edit tanggal, nominal, kategori, keterangan)
+  const handleUpdateManualField = (
+    manualIndex: number,
+    field: keyof ParsedExpenseItem,
+    value: any
+  ) => {
+    setManualItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== manualIndex) return item;
+        const updated = { ...item, [field]: value };
+        if (field === 'amount') {
+          const num = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9]/g, '')) || 0;
+          updated.amount = num;
+        }
+        return updated;
+      })
+    );
+  };
+
   // Tetapkan satu baris manual ke unit truk tertentu (langsung dipindahkan ke parsedItems)
   const handleAssignManualItem = (manualIndex: number, targetTruckId: string) => {
     const targetTruck = trucks.find((t) => t.id === targetTruckId);
@@ -238,7 +271,7 @@ DT 03:
       ...itemToMove,
       truckId: targetTruck.id,
       truckCode: targetTruck.code,
-      isValid: true,
+      isValid: itemToMove.amount > 0,
       needsManualReview: false,
       validationError: undefined,
     };
@@ -256,7 +289,7 @@ DT 03:
       ...item,
       truckId: targetTruck.id,
       truckCode: targetTruck.code,
-      isValid: true,
+      isValid: item.amount > 0,
       needsManualReview: false,
       validationError: undefined,
     }));
@@ -271,7 +304,7 @@ DT 03:
     setManualItems((prev) => prev.filter((_, idx) => idx !== manualIndex));
   };
 
-  // Helper to auto-create an unrecognized unit if user pasted e.g. DT 99
+  // Helper to auto-create an unrecognized unit if user pasted e.g. DT 99 or DT 88
   const handleRegisterNewUnit = async (unitCode: string) => {
     if (!onAddTruck) return;
     try {
@@ -287,7 +320,7 @@ DT 03:
         notes: `Unit dibuat otomatis saat tempel catatan biaya (${unitCode})`,
       });
 
-      // Re-map items that had this unit code
+      // 1. Re-map items that had this unit code in parsedItems (if any)
       setParsedItems((prev) =>
         prev.map((item) => {
           if (item.unrecognizedUnitCode === unitCode || item.truckCode === unitCode) {
@@ -303,6 +336,28 @@ DT 03:
           return item;
         })
       );
+
+      // 2. Otomatis alihkan item yang ada di manualItems dengan kode unit ini ke parsedItems!
+      const itemsToPromote = manualItems.filter(
+        (m) => m.unrecognizedUnitCode === unitCode || m.truckCode === unitCode
+      );
+      if (itemsToPromote.length > 0) {
+        const promoted: ParsedExpenseItem[] = itemsToPromote.map((item) => ({
+          ...item,
+          truckId: created.id,
+          truckCode: created.code,
+          unrecognizedUnitCode: undefined,
+          isValid: item.amount > 0,
+          needsManualReview: false,
+          validationError: undefined,
+        }));
+        setParsedItems((prev) => [...prev, ...promoted]);
+        setManualItems((prev) =>
+          prev.filter(
+            (m) => m.unrecognizedUnitCode !== unitCode && m.truckCode !== unitCode
+          )
+        );
+      }
 
       setUnmatchedUnits((prev) => prev.filter((u) => u !== unitCode));
       setDetectedUnits((prev) => [...prev, created.code]);
@@ -657,6 +712,16 @@ DT 03:
                 <span>Contoh Tanpa Kode DT</span>
               </button>
 
+              <button
+                type="button"
+                onClick={handleLoadSampleMismatchDT}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition cursor-pointer"
+                title="Uji coba catatan dengan kode DT tidak cocok di database (Fitur Data Tidak Cocok)"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+                <span>Contoh Kode Tidak Cocok (DT 88)</span>
+              </button>
+
               {inputText && (
                 <button
                   type="button"
@@ -893,8 +958,8 @@ DT 03:
                 </div>
               </div>
 
-              {/* Tab Switcher: Otomatis Cocok vs Perlu Pilah Manual */}
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+              {/* Tab Switcher: Otomatis Cocok vs Data Tidak Cocok */}
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setActiveResultTab('valid')}
@@ -923,7 +988,7 @@ DT 03:
                   }`}
                 >
                   <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  <span>Perlu Pilah Manual</span>
+                  <span>Data Tidak Cocok / Edit Manual</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
                     manualItems.length > 0
                       ? activeResultTab === 'manual'
@@ -933,6 +998,11 @@ DT 03:
                   }`}>
                     {manualItems.length}
                   </span>
+                  {manualItems.some((i) => Boolean(i.unrecognizedUnitCode)) && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/30 text-rose-200 border border-rose-500/40">
+                      {manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length} Unit Tak Terdaftar
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -1130,7 +1200,7 @@ DT 03:
                 </div>
               )}
 
-              {/* KONTEN TAB 2: DAFTAR "PERLU PILAH MANUAL" */}
+              {/* KONTEN TAB 2: FITUR DATA TIDAK COCOK / EDIT MANUAL */}
               {activeResultTab === 'manual' && (
                 <div className="space-y-4">
                   {manualItems.length === 0 ? (
@@ -1138,21 +1208,33 @@ DT 03:
                       <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-400 opacity-80" />
                       <p className="font-semibold text-slate-200 text-sm">Tidak Ada Data yang Perlu Dipilah Manual</p>
                       <p className="text-xs text-slate-400">
-                        Seluruh data telah memiliki kode DT yang cocok dan valid.
+                        Seluruh data telah memiliki kode DT yang cocok dengan unit yang tersedia di database.
                       </p>
                     </div>
                   ) : (
                     <>
-                      {/* Alert Banner Instruksi Logika 1 & 2 */}
-                      <div className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      {/* Banner Fitur Data Tidak Cocok */}
+                      <div className="bg-amber-950/25 border border-amber-500/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                         <div className="flex items-start gap-2.5">
                           <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                           <div>
-                            <h4 className="font-bold text-amber-300 text-sm">
-                              Daftar "Perlu Pilah Manual" ({manualItems.length} Catatan)
-                            </h4>
-                            <p className="text-slate-300 mt-0.5">
-                              Baris-baris berikut tidak menyebutkan kode DT yang valid atau tidak ada kode DT sama sekali. Tentukan unitnya secara manual di bawah, atau gunakan tombol cepat untuk menetapkan ke satu unit sekaligus.
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-amber-300 text-sm">
+                                Fitur Data Tidak Cocok ({manualItems.length} Catatan)
+                              </h4>
+                              {manualItems.some((i) => Boolean(i.unrecognizedUnitCode)) && (
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                  {manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length} kode unit tidak terdaftar di database
+                                </span>
+                              )}
+                              {manualItems.some((i) => !i.unrecognizedUnitCode) && (
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  {manualItems.filter((i) => !i.unrecognizedUnitCode).length} tanpa kode DT
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-slate-300 mt-1 leading-relaxed">
+                              Data yang memiliki kode unit tetapi tidak cocok dengan unit database <strong>TIDAK dimasukkan sembarangan</strong> ke unit default agar tidak menambah pekerjaan Anda. Anda dapat mengedit tanggal, kategori, rincian, dan nominal biaya secara manual di bawah, atau langsung mencocokkannya ke unit yang ada.
                             </p>
                           </div>
                         </div>
@@ -1167,7 +1249,7 @@ DT 03:
                           >
                             {trucks.map((t) => (
                               <option key={t.id} value={t.id}>
-                                {t.code}
+                                {t.code} ({t.plateNumber})
                               </option>
                             ))}
                           </select>
@@ -1181,82 +1263,211 @@ DT 03:
                         </div>
                       </div>
 
-                      {/* Tabel Perlu Pilah Manual */}
-                      <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto">
+                      {/* Sub-Filter Chips */}
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <span className="text-slate-400 text-[11px] font-semibold mr-1">Filter Tampilan:</span>
+                        <button
+                          type="button"
+                          onClick={() => setManualFilter('all')}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                            manualFilter === 'all'
+                              ? 'bg-amber-500 text-slate-950 font-bold'
+                              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                          }`}
+                        >
+                          Semua ({manualItems.length})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setManualFilter('mismatch')}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                            manualFilter === 'mismatch'
+                              ? 'bg-rose-500 text-white font-bold'
+                              : 'bg-slate-900 text-slate-400 hover:text-rose-300 border border-slate-800'
+                          }`}
+                        >
+                          Kode Tidak Ada di Database ({manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setManualFilter('nocode')}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                            manualFilter === 'nocode'
+                              ? 'bg-amber-500 text-slate-950 font-bold'
+                              : 'bg-slate-900 text-slate-400 hover:text-amber-300 border border-slate-800'
+                          }`}
+                        >
+                          Tanpa Kode DT ({manualItems.filter((i) => !i.unrecognizedUnitCode).length})
+                        </button>
+                      </div>
+
+                      {/* Tabel Data Tidak Cocok dengan Fitur Edit Manual Lengkap */}
+                      <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto shadow-inner">
                         <table className="w-full text-left text-xs">
                           <thead>
-                            <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                            <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
                               <th className="py-2.5 px-3 w-8">No</th>
-                              <th className="py-2.5 px-3">Teks Asli yang Ditempel</th>
-                              <th className="py-2.5 px-3">Kategori</th>
-                              <th className="py-2.5 px-3">Nominal (Rp)</th>
-                              <th className="py-2.5 px-3">Status / Alasan Disisihkan</th>
-                              <th className="py-2.5 px-3">Pilih DT (Manual)</th>
-                              <th className="py-2.5 px-3 text-center">Aksi</th>
+                              <th className="py-2.5 px-3 w-32">Tanggal</th>
+                              <th className="py-2.5 px-3">Kode / Alasan Disisihkan</th>
+                              <th className="py-2.5 px-3 w-36">Kategori</th>
+                              <th className="py-2.5 px-3 min-w-[200px]">Keterangan (Edit Manual)</th>
+                              <th className="py-2.5 px-3 w-36">Nominal Biaya</th>
+                              <th className="py-2.5 px-3 w-44">Cocokkan ke Unit</th>
+                              <th className="py-2.5 px-3 text-center w-12">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-850">
-                            {manualItems.map((item, idx) => {
-                              const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
-                              return (
-                                <tr key={item.id} className="hover:bg-slate-900/40 transition">
-                                  <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
+                            {manualItems
+                              .map((item, originalIdx) => ({ item, originalIdx }))
+                              .filter(({ item }) => {
+                                if (manualFilter === 'mismatch') return Boolean(item.unrecognizedUnitCode);
+                                if (manualFilter === 'nocode') return !item.unrecognizedUnitCode;
+                                return true;
+                              })
+                              .map(({ item, originalIdx }, displayIdx) => {
+                                const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
+                                const isUnmatchedCode = Boolean(item.unrecognizedUnitCode);
 
-                                  <td className="py-2.5 px-3 font-mono text-slate-200 max-w-xs truncate" title={item.rawText || item.description}>
-                                    {item.rawText || item.description}
-                                  </td>
+                                return (
+                                  <tr key={item.id} className="hover:bg-slate-900/50 transition">
+                                    <td className="py-2.5 px-3 font-mono text-slate-500 align-top pt-3">
+                                      {displayIdx + 1}
+                                    </td>
 
-                                  <td className="py-2.5 px-3 whitespace-nowrap">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${catColor.bg} ${catColor.text} ${catColor.border}`}>
-                                      {item.category}
-                                    </span>
-                                  </td>
+                                    {/* Tanggal (Editable) */}
+                                    <td className="py-2.5 px-3 align-top">
+                                      <input
+                                        type="date"
+                                        value={item.date}
+                                        onChange={(e) =>
+                                          handleUpdateManualField(originalIdx, 'date', e.target.value)
+                                        }
+                                        className="bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2 py-1 text-slate-200 text-xs font-mono focus:outline-none w-full"
+                                      />
+                                    </td>
 
-                                  <td className="py-2.5 px-3 whitespace-nowrap font-mono font-bold text-emerald-400">
-                                    {formatRupiah(item.amount)}
-                                  </td>
+                                    {/* Kode & Alasan Disisihkan */}
+                                    <td className="py-2.5 px-3 align-top space-y-1">
+                                      {isUnmatchedCode ? (
+                                        <div>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                              {item.unrecognizedUnitCode}
+                                            </span>
+                                            <span className="text-[10px] text-rose-400 font-medium">
+                                              Tidak cocok di database
+                                            </span>
+                                          </div>
+                                          {onAddTruck && item.unrecognizedUnitCode && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRegisterNewUnit(item.unrecognizedUnitCode!)}
+                                              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer"
+                                              title={`Daftarkan unit ${item.unrecognizedUnitCode} ke database`}
+                                            >
+                                              <span>+ Daftarkan {item.unrecognizedUnitCode}</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                          <Info className="w-3 h-3 text-amber-400" />
+                                          <span>Tanpa Kode DT</span>
+                                        </span>
+                                      )}
+                                      <div className="text-[10px] text-slate-400 font-mono truncate max-w-xs" title={item.rawText}>
+                                        Teks: "{item.rawText || item.description}"
+                                      </div>
+                                    </td>
 
-                                  <td className="py-2.5 px-3 text-amber-400 text-[11px]">
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
-                                      <Info className="w-3 h-3 text-amber-400" />
-                                      <span>{item.manualReason || 'Format kode DT tidak cocok'}</span>
-                                    </span>
-                                  </td>
+                                    {/* Kategori (Editable) */}
+                                    <td className="py-2.5 px-3 align-top">
+                                      <select
+                                        value={item.category}
+                                        onChange={(e) =>
+                                          handleUpdateManualField(
+                                            originalIdx,
+                                            'category',
+                                            e.target.value as ExpenseCategory
+                                          )
+                                        }
+                                        className={`w-full bg-slate-900 border ${catColor.border} rounded-lg px-2 py-1 text-xs font-semibold ${catColor.text} focus:outline-none`}
+                                      >
+                                        {CATEGORIES.map((cat) => (
+                                          <option key={cat} value={cat}>
+                                            {cat}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
 
-                                  <td className="py-2.5 px-3 whitespace-nowrap">
-                                    <div className="flex items-center gap-1.5">
+                                    {/* Keterangan (Editable) */}
+                                    <td className="py-2.5 px-3 align-top">
+                                      <input
+                                        type="text"
+                                        value={item.description}
+                                        onChange={(e) =>
+                                          handleUpdateManualField(originalIdx, 'description', e.target.value)
+                                        }
+                                        placeholder="Keterangan biaya..."
+                                        className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none"
+                                      />
+                                    </td>
+
+                                    {/* Nominal (Editable) */}
+                                    <td className="py-2.5 px-3 align-top">
+                                      <input
+                                        type="number"
+                                        value={item.amount || ''}
+                                        onChange={(e) =>
+                                          handleUpdateManualField(originalIdx, 'amount', e.target.value)
+                                        }
+                                        placeholder="Nominal..."
+                                        className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-lg px-2 py-1 text-xs font-mono font-bold text-emerald-400 focus:outline-none"
+                                      />
+                                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                                        {formatRupiah(item.amount)}
+                                      </span>
+                                    </td>
+
+                                    {/* Pilih DT (Cocokkan) */}
+                                    <td className="py-2.5 px-3 align-top whitespace-nowrap">
                                       <select
                                         defaultValue=""
                                         onChange={(e) => {
                                           if (e.target.value) {
-                                            handleAssignManualItem(idx, e.target.value);
+                                            handleAssignManualItem(originalIdx, e.target.value);
                                           }
                                         }}
-                                        className="bg-slate-900 border border-amber-500/50 hover:border-amber-400 rounded-lg px-2.5 py-1 text-xs text-white font-bold focus:outline-none"
+                                        className="w-full bg-slate-900 border border-emerald-500/50 hover:border-emerald-400 focus:border-emerald-400 rounded-lg px-2 py-1.5 text-xs text-emerald-300 font-bold focus:outline-none cursor-pointer"
                                       >
-                                        <option value="" disabled>-- Pilih DT --</option>
+                                        <option value="" disabled>
+                                          -- Pilih Unit Truk --
+                                        </option>
                                         {trucks.map((t) => (
                                           <option key={t.id} value={t.id}>
                                             {t.code} ({t.plateNumber})
                                           </option>
                                         ))}
                                       </select>
-                                    </div>
-                                  </td>
+                                    </td>
 
-                                  <td className="py-2.5 px-3 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteManualItem(idx)}
-                                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
-                                      title="Hapus baris ini dari daftar manual"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                                    {/* Aksi Hapus */}
+                                    <td className="py-2.5 px-3 text-center align-top pt-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteManualItem(originalIdx)}
+                                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
+                                        title="Hapus baris ini dari daftar manual"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                           </tbody>
                         </table>
                       </div>
