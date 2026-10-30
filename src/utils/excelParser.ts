@@ -5,6 +5,7 @@ import { CATEGORIES } from '../data/initialData';
 export interface ParsedExpenseItem {
   id: string;
   rawIndex: number;
+  rawText?: string;
   date: string;
   truckId: string;
   truckCode: string;
@@ -16,6 +17,8 @@ export interface ParsedExpenseItem {
   invoiceNumber?: string;
   isValid: boolean;
   validationError?: string;
+  needsManualReview?: boolean;
+  manualReason?: string;
 }
 
 export interface UnitCostBreakdown {
@@ -215,7 +218,7 @@ export function detectCategory(text: string): ExpenseCategory {
 
 /**
  * Intelligent Truck matching
- * Matches "DT 90", "Unit 90", "90", "DT-90", "DT 01", "BM 8456 TBS", or driver name
+ * Robustly matches: "DT 90", "DT90", "dt 90", "dt90", "DT-90", "dt-90", "DT_90", "Unit 90", "90", "DT 01", "BM 8456 TBS", or driver name
  */
 export function matchTruck(text: string, trucks: TruckUnit[]): TruckUnit | null {
   if (!text || trucks.length === 0) return null;
@@ -245,17 +248,22 @@ export function matchTruck(text: string, trucks: TruckUnit[]): TruckUnit | null 
     if (plateNumOnly && clean.includes(plateNumOnly)) return truck;
   }
 
-  // 4. Regex word boundary match for Unit / DT numbers (e.g. "DT 90" or "Unit 90" or "DT-90" inside longer text)
+  // 4. Regex pattern match for Unit / DT numbers in mixed text:
+  // Catches: DT 90, DT90, dt 90, dt90, DT-90, dt-90, DT_90, dt_90, Unit 90, unit90, etc.
   for (const truck of trucks) {
     const numOnly = truck.code.replace(/[^0-9]/g, '');
     if (numOnly) {
-      // Regex pattern: matches "dt 90", "unit 90", "dt-90", "dt90", "unit-90", "#90"
-      const unitPattern = new RegExp(`(?:\\b|\\s|_|-)(?:dt|unit|dump\\s*truck|truk|armada)[\\s-_]*0?${numOnly}\\b`, 'i');
+      const normalizedNum = String(parseInt(numOnly, 10));
+      // Matches "dt90", "dt 90", "dt-90", "dt_90", "unit90", "dt 090", "dt.90", etc.
+      const unitPattern = new RegExp(
+        `(?:^|[\\s(_\\[:-])(?:dt|unit|dump\\s*truck|truk|armada)[\\s_.-]*0*${normalizedNum}(?:$|[\\s)_\\]:;,-])`,
+        'i'
+      );
       if (unitPattern.test(text)) {
         return truck;
       }
-      // Also match standalone isolated number if prefixed by # or bounded
-      const isolatedPattern = new RegExp(`(?:#|no\\.?\\s*)0?${numOnly}\\b`, 'i');
+      // Also match standalone isolated number if prefixed by # or no.
+      const isolatedPattern = new RegExp(`(?:#|no\\.?\\s*)0*${normalizedNum}(?:\\b|[^0-9a-zA-Z]|$)`, 'i');
       if (isolatedPattern.test(text)) {
         return truck;
       }
@@ -275,11 +283,12 @@ export function matchTruck(text: string, trucks: TruckUnit[]): TruckUnit | null 
 
 /**
  * Extract Unit code pattern from text even if not yet in database
- * e.g. "DT 90", "DT 15", "Unit 04"
+ * e.g. "DT 90", "DT90", "dt 90", "dt-90", "Unit 04"
  */
 export function extractRawUnitCode(text: string): string | null {
   if (!text) return null;
-  const match = text.match(/(?:dt|unit|dump\s*truck|armada)[-\s]*([0-9]{1,3}[a-zA-Z]?)/i);
+  // Catches "dt 90", "dt90", "DT-90", "dt_90", "unit 90", etc.
+  const match = text.match(/(?:^|[\s(_\[:-])(?:dt|unit|dump\s*truck|armada)[\s_.-]*([0-9]{1,3}[a-zA-Z]?)(?:$|[\s)_\]:;,-])/i);
   if (match) {
     const num = match[1].trim();
     return `DT ${num.padStart(2, '0')}`;
@@ -382,51 +391,79 @@ export function parseDate(val: any): string {
   return new Date().toISOString().split('T')[0];
 }
 
+export interface ParseFreeformOptions {
+  useDefaultTruck?: boolean;
+  defaultTruckId?: string;
+}
+
+export interface ParseFreeformResult {
+  items: ParsedExpenseItem[];
+  manualItems: ParsedExpenseItem[];
+  detectedUnits: string[];
+  unmatchedUnits: string[];
+}
+
 /**
  * Freeform Natural Language Note Parser
  * Parses WhatsApp messages, casual notes, unstructured text, bullet points.
- * Context-aware: when a unit (like "DT 90" or "Unit 90") is detected in a line or header,
- * all subsequent items belong to that unit until another unit is mentioned!
+ * 
+ * LOGIKA 1: Ekstraksi & Validasi Format Kode DT
+ * - Mencari pola DT (DT 90, DT90, dt 90, dt90, DT-90, dll.)
+ * - Jika Format Valid (Cocok): Langsung dikelompokkan ke kategori DT yang sesuai.
+ * - Jika Format Tidak Valid / Tidak Ada Kode:
+ *   - Jika Tombol DT Default AKTIF (ON): Masuk ke nomor DT default terpilih.
+ *   - Jika Tombol DT Default NON-AKTIF (OFF): Otomatis disisihkan ke daftar "Perlu Pilah Manual".
  */
 export function parseFreeformNotes(
   text: string,
   trucks: TruckUnit[],
-  defaultTruckId?: string
-): {
-  items: ParsedExpenseItem[];
-  detectedUnits: string[];
-  unmatchedUnits: string[];
-} {
+  options?: ParseFreeformOptions | string
+): ParseFreeformResult {
   if (!text || !text.trim()) {
-    return { items: [], detectedUnits: [], unmatchedUnits: [] };
+    return { items: [], manualItems: [], detectedUnits: [], unmatchedUnits: [] };
   }
+
+  // Normalize options
+  let useDefaultTruck = false;
+  let defaultTruckId = '';
+  if (typeof options === 'string') {
+    defaultTruckId = options;
+    useDefaultTruck = Boolean(options);
+  } else if (options && typeof options === 'object') {
+    useDefaultTruck = Boolean(options.useDefaultTruck);
+    defaultTruckId = options.defaultTruckId || '';
+  }
+
+  const defaultTruck =
+    (defaultTruckId ? trucks.find((t) => t.id === defaultTruckId) : null) ||
+    trucks[0] ||
+    null;
 
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
   const items: ParsedExpenseItem[] = [];
+  const manualItems: ParsedExpenseItem[] = [];
   const detectedUnitsSet = new Set<string>();
   const unmatchedUnitsSet = new Set<string>();
 
-  let activeTruck: TruckUnit | null =
-    (defaultTruckId ? trucks.find((t) => t.id === defaultTruckId) : null) || null;
+  let activeTruck: TruckUnit | null = null;
   let activeRawUnitCode: string | null = null;
   const todayStr = new Date().toISOString().split('T')[0];
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
 
-    // Check if line is a unit header, e.g.:
-    // "DT 90", "DT 90:", "[DT 90]", "Unit 90", "Dump Truck 90", "=== DT 01 ==="
+    // Cek apakah baris merupakan header unit (contoh: "DT 90", "DT90:", "[dt 90]", "Unit 90", "=== DT 01 ===")
     const lineMatchedTruck = matchTruck(line, trucks);
     const rawUnitFound = extractRawUnitCode(line);
 
-    // Check if line contains an amount
+    // Cek apakah baris mengandung nominal biaya
     const amountInLine = extractAmountFromText(line);
 
-    // If line is strictly or primarily a unit header without expenses:
+    // Jika baris adalah murni header unit tanpa biaya:
     const isPureHeader =
       Boolean(lineMatchedTruck || rawUnitFound) &&
       amountInLine <= 0 &&
-      line.length < 50;
+      line.length < 60;
 
     if (isPureHeader) {
       if (lineMatchedTruck) {
@@ -441,75 +478,106 @@ export function parseFreeformNotes(
       continue;
     }
 
-    // If line has an expense, check if it specifies a truck locally:
-    let lineTruck = activeTruck;
-    let lineRawCode = activeRawUnitCode;
+    const amount = amountInLine;
+    if (amount <= 0) {
+      // Baris bukan catatan biaya (misal judul, sapaan, catatan non-angka), lewati
+      continue;
+    }
+
+    // Tentukan truk untuk baris biaya ini:
+    let lineTruck: TruckUnit | null = null;
+    let lineRawCode: string | null = null;
 
     if (lineMatchedTruck) {
+      // Baris ini secara eksplisit menyebutkan kode DT valid
       lineTruck = lineMatchedTruck;
-      activeTruck = lineMatchedTruck; // update context as well
+      activeTruck = lineMatchedTruck; // perbarui konteks untuk baris-baris berikutnya
       activeRawUnitCode = null;
       detectedUnitsSet.add(lineMatchedTruck.code);
-    } else if (rawUnitFound && !activeTruck) {
+    } else if (activeTruck) {
+      // Mengikuti header DT aktif sebelumnya
+      lineTruck = activeTruck;
+    } else if (rawUnitFound) {
+      // Menulis kode DT tetapi unit tidak ditemukan di database
       lineRawCode = rawUnitFound;
       unmatchedUnitsSet.add(rawUnitFound);
     }
 
-    // If still no truck and we have a defaultTruckId, assign it
-    if (!lineTruck && defaultTruckId) {
-      lineTruck = trucks.find((t) => t.id === defaultTruckId) || null;
-    }
-    // If still no truck and trucks exist, default to first truck as fallback
-    if (!lineTruck && trucks.length > 0 && !lineRawCode) {
-      lineTruck = trucks[0];
-    }
-
-    const amount = amountInLine;
-    if (amount <= 0) {
-      // Line doesn't look like an expense record, skip
-      continue;
-    }
-
     const category = detectCategory(line);
     const date = extractDateFromText(line) || todayStr;
-
-    // Clean description: strip amount substrings, unit markers, leading bullets
     const cleanDesc = cleanExpenseDescription(line, category);
-
-    // Vendor estimation based on category
-    let vendor = extractVendorFromText(line, category);
-
-    // Invoice number if present
+    const vendor = extractVendorFromText(line, category);
     const invoiceMatch = line.match(/(?:inv|nota|kwitansi|faktur|no\.?|struk)[-:\s#]*([a-zA-Z0-9\/-]+)/i);
     const invoiceNumber = invoiceMatch ? invoiceMatch[1].trim() : undefined;
 
-    const isValid = amount > 0 && Boolean(lineTruck);
-    const validationError =
-      amount <= 0
-        ? 'Nominal biaya tidak valid'
-        : !lineTruck
-        ? `Unit ${lineRawCode || 'DT'} belum terdaftar di database`
-        : undefined;
-
-    items.push({
-      id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      rawIndex: idx,
-      date,
-      truckId: lineTruck?.id || '',
-      truckCode: lineTruck?.code || lineRawCode || 'DT Belum Dikenali',
-      unrecognizedUnitCode: !lineTruck && lineRawCode ? lineRawCode : undefined,
-      category,
-      description: cleanDesc,
-      amount,
-      vendor,
-      invoiceNumber,
-      isValid,
-      validationError,
-    });
+    // LOGIKA 1 & 2: FORMAT VALID vs PERLU PILAH MANUAL vs DT DEFAULT
+    if (lineTruck) {
+      // Format Valid (Cocok): Langsung dikelompokkan ke DT yang sesuai
+      items.push({
+        id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        rawIndex: idx,
+        rawText: line,
+        date,
+        truckId: lineTruck.id,
+        truckCode: lineTruck.code,
+        category,
+        description: cleanDesc,
+        amount,
+        vendor,
+        invoiceNumber,
+        isValid: true,
+        needsManualReview: false,
+      });
+    } else {
+      // Format Tidak Valid / Tidak Ada Kode DT pada baris ini
+      if (useDefaultTruck && defaultTruck) {
+        // KONDISI AKTIF (ON):
+        // Tidak disisihkan ke manual, langsung memasukkan biaya ke nomor DT default terpilih
+        detectedUnitsSet.add(defaultTruck.code);
+        items.push({
+          id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          rawIndex: idx,
+          rawText: line,
+          date,
+          truckId: defaultTruck.id,
+          truckCode: defaultTruck.code,
+          category,
+          description: cleanDesc,
+          amount,
+          vendor,
+          invoiceNumber,
+          isValid: true,
+          needsManualReview: false,
+        });
+      } else {
+        // KONDISI NON-AKTIF (OFF):
+        // Murni logika otomatis. Otomatis disisihkan ke dalam daftar "Perlu Pilah Manual"
+        manualItems.push({
+          id: `manual-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          rawIndex: idx,
+          rawText: line,
+          date,
+          truckId: '',
+          truckCode: lineRawCode || 'Perlu Pilah Manual',
+          unrecognizedUnitCode: lineRawCode || undefined,
+          category,
+          description: cleanDesc,
+          amount,
+          vendor,
+          invoiceNumber,
+          isValid: false,
+          needsManualReview: true,
+          manualReason: lineRawCode
+            ? `Kode unit "${lineRawCode}" belum terdaftar di database`
+            : 'Tidak ada kode DT pada baris ini (Format tidak valid / tidak ada kode)',
+        });
+      }
+    }
   }
 
   return {
     items,
+    manualItems,
     detectedUnits: Array.from(detectedUnitsSet),
     unmatchedUnits: Array.from(unmatchedUnitsSet),
   };
@@ -702,18 +770,37 @@ export function detectColumns(headerRow: any[]) {
 /**
  * Process raw 2D array rows (from Excel or TSV table paste)
  */
+/**
+ * Process raw 2D array rows (from Excel or TSV table paste)
+ */
 export function processRawRows(
   rows: any[][],
   trucks: TruckUnit[],
-  defaultTruckId?: string
-): { items: ParsedExpenseItem[]; detectedHeaders: string[] } {
+  options?: { useDefaultTruck?: boolean; defaultTruckId?: string } | string
+): { items: ParsedExpenseItem[]; manualItems: ParsedExpenseItem[]; detectedHeaders: string[] } {
   if (!rows || rows.length === 0) {
-    return { items: [], detectedHeaders: [] };
+    return { items: [], manualItems: [], detectedHeaders: [] };
   }
+
+  // Normalize options
+  let useDefaultTruck = false;
+  let defaultTruckId = '';
+  if (typeof options === 'string') {
+    defaultTruckId = options;
+    useDefaultTruck = Boolean(options);
+  } else if (options && typeof options === 'object') {
+    useDefaultTruck = Boolean(options.useDefaultTruck);
+    defaultTruckId = options.defaultTruckId || '';
+  }
+
+  const defaultTruck =
+    (defaultTruckId ? trucks.find((t) => t.id === defaultTruckId) : null) ||
+    trucks[0] ||
+    null;
 
   const cleanRows = rows.filter((r) => r.some((c) => c !== null && c !== undefined && String(c).trim() !== ''));
   if (cleanRows.length === 0) {
-    return { items: [], detectedHeaders: [] };
+    return { items: [], manualItems: [], detectedHeaders: [] };
   }
 
   let startRowIndex = 0;
@@ -751,6 +838,7 @@ export function processRawRows(
   }
 
   const items: ParsedExpenseItem[] = [];
+  const manualItems: ParsedExpenseItem[] = [];
 
   for (let r = startRowIndex; r < cleanRows.length; r++) {
     const row = cleanRows[r];
@@ -770,15 +858,10 @@ export function processRawRows(
     }
 
     let matchedTruck = matchTruck(rawUnit, trucks);
-    if (!matchedTruck && defaultTruckId) {
-      matchedTruck = trucks.find((t) => t.id === defaultTruckId) || null;
-    }
     if (!matchedTruck && rawDesc) {
       matchedTruck = matchTruck(rawDesc, trucks);
     }
-    if (!matchedTruck && trucks.length > 0) {
-      matchedTruck = trucks[0];
-    }
+    const rawUnitFound = extractRawUnitCode(rawUnit) || extractRawUnitCode(rawDesc);
 
     let category: ExpenseCategory = 'Sparepart';
     if (rawCategory) {
@@ -789,38 +872,73 @@ export function processRawRows(
       category = detectCategory(rawVendor);
     }
 
-    const description = rawDesc.trim() || `Pengeluaran ${category} ${matchedTruck?.code || 'Unit'}`;
+    const description = rawDesc.trim() || `Pengeluaran ${category}`;
     let vendor = rawVendor.trim();
     if (!vendor) {
       vendor = extractVendorFromText(rawDesc || category, category);
     }
 
     const date = parseDate(rawDate);
-    const isValid = amount > 0 && Boolean(matchedTruck);
-    const validationError =
-      amount <= 0
-        ? 'Nominal biaya tidak valid (0 atau kosong)'
-        : !matchedTruck
-        ? 'Unit DT tidak dikenali'
-        : undefined;
+    const rowText = row.filter(Boolean).join(' | ');
 
-    items.push({
-      id: `parsed-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      rawIndex: r,
-      date,
-      truckId: matchedTruck?.id || trucks[0]?.id || '',
-      truckCode: matchedTruck?.code || 'Unit Truk',
-      category,
-      description,
-      amount,
-      vendor,
-      invoiceNumber: rawInvoice.trim() || undefined,
-      isValid,
-      validationError,
-    });
+    if (matchedTruck) {
+      items.push({
+        id: `parsed-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        rawIndex: r,
+        rawText: rowText,
+        date,
+        truckId: matchedTruck.id,
+        truckCode: matchedTruck.code,
+        category,
+        description,
+        amount,
+        vendor,
+        invoiceNumber: rawInvoice.trim() || undefined,
+        isValid: true,
+        needsManualReview: false,
+      });
+    } else {
+      if (useDefaultTruck && defaultTruck) {
+        items.push({
+          id: `parsed-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          rawIndex: r,
+          rawText: rowText,
+          date,
+          truckId: defaultTruck.id,
+          truckCode: defaultTruck.code,
+          category,
+          description,
+          amount,
+          vendor,
+          invoiceNumber: rawInvoice.trim() || undefined,
+          isValid: true,
+          needsManualReview: false,
+        });
+      } else {
+        manualItems.push({
+          id: `manual-table-${r}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          rawIndex: r,
+          rawText: rowText,
+          date,
+          truckId: '',
+          truckCode: rawUnitFound || 'Perlu Pilah Manual',
+          unrecognizedUnitCode: rawUnitFound || undefined,
+          category,
+          description,
+          amount,
+          vendor,
+          invoiceNumber: rawInvoice.trim() || undefined,
+          isValid: false,
+          needsManualReview: true,
+          manualReason: rawUnitFound
+            ? `Kode unit "${rawUnitFound}" belum terdaftar di database`
+            : 'Tidak ada kode DT pada baris tabel (Format tidak valid / tidak ada kode)',
+        });
+      }
+    }
   }
 
-  return { items, detectedHeaders };
+  return { items, manualItems, detectedHeaders };
 }
 
 /**
@@ -829,10 +947,10 @@ export function processRawRows(
 export function parsePastedExcelText(
   text: string,
   trucks: TruckUnit[],
-  defaultTruckId?: string
-): { items: ParsedExpenseItem[]; detectedHeaders: string[] } {
+  options?: { useDefaultTruck?: boolean; defaultTruckId?: string } | string
+): { items: ParsedExpenseItem[]; manualItems: ParsedExpenseItem[]; detectedHeaders: string[] } {
   if (!text || !text.trim()) {
-    return { items: [], detectedHeaders: [] };
+    return { items: [], manualItems: [], detectedHeaders: [] };
   }
 
   // If text doesn't contain tabs or semicolons, but has newline with freeform content,
@@ -841,10 +959,12 @@ export function parsePastedExcelText(
   const hasSemicolons = text.includes(';');
 
   if (!hasTabs && !hasSemicolons) {
-    const freeformResult = parseFreeformNotes(text, trucks, defaultTruckId);
-    if (freeformResult.items.length > 0) {
-      return { items: freeformResult.items, detectedHeaders: ['Teks Catatan Bebas'] };
-    }
+    const freeformResult = parseFreeformNotes(text, trucks, options);
+    return {
+      items: freeformResult.items,
+      manualItems: freeformResult.manualItems,
+      detectedHeaders: ['Teks Catatan Bebas'],
+    };
   }
 
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
@@ -866,7 +986,7 @@ export function parsePastedExcelText(
     }
   });
 
-  return processRawRows(rows, trucks, defaultTruckId);
+  return processRawRows(rows, trucks, options);
 }
 
 /**
@@ -875,8 +995,8 @@ export function parsePastedExcelText(
 export async function parseExcelFile(
   file: File,
   trucks: TruckUnit[],
-  defaultTruckId?: string
-): Promise<{ items: ParsedExpenseItem[]; detectedHeaders: string[]; sheetNames: string[] }> {
+  options?: { useDefaultTruck?: boolean; defaultTruckId?: string } | string
+): Promise<{ items: ParsedExpenseItem[]; manualItems: ParsedExpenseItem[]; detectedHeaders: string[]; sheetNames: string[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -898,8 +1018,8 @@ export async function parseExcelFile(
           dateNF: 'yyyy-mm-dd',
         });
 
-        const { items, detectedHeaders } = processRawRows(rawRows, trucks, defaultTruckId);
-        resolve({ items, detectedHeaders, sheetNames });
+        const { items, manualItems, detectedHeaders } = processRawRows(rawRows, trucks, options);
+        resolve({ items, manualItems, detectedHeaders, sheetNames });
       } catch (err) {
         reject(err);
       }

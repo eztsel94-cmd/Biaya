@@ -62,15 +62,21 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successCount, setSuccessCount] = useState<number | null>(null);
 
-  // Default target truck if unit isn't found in text
-  const [selectedDefaultTruck, setSelectedDefaultTruck] = useState<string>(
-    defaultTruckId || (trucks[0]?.id || '')
+  // Unit Default state & toggle switch (Aktif / Non-Aktif)
+  const [useDefaultTruck, setUseDefaultTruck] = useState<boolean>(false);
+  const [selectedDefaultTruckId, setSelectedDefaultTruckId] = useState<string>(
+    defaultTruckId || trucks[0]?.id || ''
   );
 
   // Parsed items & breakdown state
   const [parsedItems, setParsedItems] = useState<ParsedExpenseItem[]>([]);
+  const [manualItems, setManualItems] = useState<ParsedExpenseItem[]>([]);
   const [detectedUnits, setDetectedUnits] = useState<string[]>([]);
   const [unmatchedUnits, setUnmatchedUnits] = useState<string[]>([]);
+  const [activeResultTab, setActiveResultTab] = useState<'valid' | 'manual'>('valid');
+  const [bulkManualTruckId, setBulkManualTruckId] = useState<string>(
+    defaultTruckId || trucks[0]?.id || ''
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
@@ -86,30 +92,47 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
     try {
       setIsProcessing(true);
-      // If user pasted a tabbed table or structured CSV, use parsePastedExcelText
-      // otherwise use the specialized freeform notes parser
-      if (inputText.includes('\t') || inputText.includes(';')) {
-        const { items } = parsePastedExcelText(inputText, trucks, selectedDefaultTruck);
-        if (items.length === 0) {
-          setErrorMessage('Tidak ada baris data biaya yang dapat dibaca. Pastikan terdapat kolom nominal biaya.');
+      const parseOptions = {
+        useDefaultTruck,
+        defaultTruckId: selectedDefaultTruckId,
+      };
+
+      if (inputText.includes('\t') || (inputText.includes(';') && !inputText.includes(','))) {
+        const { items, manualItems: mItems } = parsePastedExcelText(inputText, trucks, parseOptions);
+        if (items.length === 0 && mItems.length === 0) {
+          setErrorMessage('Tidak ada baris data biaya yang dapat dideteksi dari teks tabel yang ditempel.');
           setParsedItems([]);
+          setManualItems([]);
           return;
         }
         setParsedItems(items);
+        setManualItems(mItems);
         setDetectedUnits(Array.from(new Set(items.map((i) => i.truckCode))));
         setUnmatchedUnits([]);
+        if (items.length === 0 && mItems.length > 0) {
+          setActiveResultTab('manual');
+        } else {
+          setActiveResultTab('valid');
+        }
       } else {
-        const result = parseFreeformNotes(inputText, trucks, selectedDefaultTruck);
-        if (result.items.length === 0) {
+        const result = parseFreeformNotes(inputText, trucks, parseOptions);
+        if (result.items.length === 0 && result.manualItems.length === 0) {
           setErrorMessage(
-            'Tidak ada data biaya yang terdeteksi. Pastikan mencantumkan nominal (contoh: "DT 90 Solar 850.000" atau "ganti rem 450rb").'
+            'Tidak ada data biaya yang terdeteksi. Pastikan mencantumkan rincian dan nominal biaya (contoh: "Solar 850.000").'
           );
           setParsedItems([]);
+          setManualItems([]);
           return;
         }
         setParsedItems(result.items);
+        setManualItems(result.manualItems);
         setDetectedUnits(result.detectedUnits);
         setUnmatchedUnits(result.unmatchedUnits);
+        if (result.items.length === 0 && result.manualItems.length > 0) {
+          setActiveResultTab('manual');
+        } else {
+          setActiveResultTab('valid');
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memilah data yang ditempel.');
@@ -157,6 +180,17 @@ DT 03:
     setErrorMessage(null);
   };
 
+  // Contoh tanpa kode DT untuk menguji logika Unit Default ON vs OFF
+  const handleLoadSampleWithoutDT = () => {
+    setActiveTab('freeform');
+    setInputText(`- Bio solar 100 liter 850.000 SPBU Pasir
+- Kampas rem depan bendix 450rb
+- Ongkos montir bengkel las 200rb
+- Ganti oli mesin meditran 550rb
+- Tambal ban dump truk 80.000`);
+    setErrorMessage(null);
+  };
+
   // Handle file upload
   const handleFileUpload = async (file: File) => {
     setErrorMessage(null);
@@ -164,22 +198,77 @@ DT 03:
     setIsProcessing(true);
 
     try {
-      const { items } = await parseExcelFile(file, trucks, selectedDefaultTruck);
+      const { items, manualItems: mItems } = await parseExcelFile(file, trucks, {
+        useDefaultTruck,
+        defaultTruckId: selectedDefaultTruckId,
+      });
 
-      if (items.length === 0) {
-        setErrorMessage('File Excel tidak berisi data nominal biaya yang dapat dibaca.');
+      if (items.length === 0 && mItems.length === 0) {
+        setErrorMessage('File Excel tidak berisi data nominal biaya yang valid.');
         setParsedItems([]);
+        setManualItems([]);
         return;
       }
 
       setParsedItems(items);
+      setManualItems(mItems);
       setDetectedUnits(Array.from(new Set(items.map((i) => i.truckCode))));
       setUnmatchedUnits([]);
+      if (items.length === 0 && mItems.length > 0) {
+        setActiveResultTab('manual');
+      } else {
+        setActiveResultTab('valid');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal memproses file Excel.');
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Tetapkan satu baris manual ke unit truk tertentu (langsung dipindahkan ke parsedItems)
+  const handleAssignManualItem = (manualIndex: number, targetTruckId: string) => {
+    const targetTruck = trucks.find((t) => t.id === targetTruckId);
+    if (!targetTruck) return;
+
+    const itemToMove = manualItems[manualIndex];
+    if (!itemToMove) return;
+
+    const updatedItem: ParsedExpenseItem = {
+      ...itemToMove,
+      truckId: targetTruck.id,
+      truckCode: targetTruck.code,
+      isValid: true,
+      needsManualReview: false,
+      validationError: undefined,
+    };
+
+    setParsedItems((prev) => [...prev, updatedItem]);
+    setManualItems((prev) => prev.filter((_, idx) => idx !== manualIndex));
+  };
+
+  // Terapkan semua baris di daftar "Perlu Pilah Manual" ke unit yang dipilih
+  const handleBulkAssignManual = (targetTruckId: string) => {
+    const targetTruck = trucks.find((t) => t.id === targetTruckId);
+    if (!targetTruck || manualItems.length === 0) return;
+
+    const convertedItems: ParsedExpenseItem[] = manualItems.map((item) => ({
+      ...item,
+      truckId: targetTruck.id,
+      truckCode: targetTruck.code,
+      isValid: true,
+      needsManualReview: false,
+      validationError: undefined,
+    }));
+
+    setParsedItems((prev) => [...prev, ...convertedItems]);
+    setManualItems([]);
+    setActiveResultTab('valid');
+  };
+
+  // Hapus satu baris dari daftar "Perlu Pilah Manual"
+  const handleDeleteManualItem = (manualIndex: number) => {
+    setManualItems((prev) => prev.filter((_, idx) => idx !== manualIndex));
   };
 
   // Helper to auto-create an unrecognized unit if user pasted e.g. DT 99
@@ -558,16 +647,20 @@ DT 03:
                 <span>Contoh Multi Unit</span>
               </button>
 
+              <button
+                type="button"
+                onClick={handleLoadSampleWithoutDT}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition cursor-pointer"
+                title="Uji coba teks tanpa kode DT (Uji coba Toggle DT Default ON vs OFF)"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Contoh Tanpa Kode DT</span>
+              </button>
+
               {inputText && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setInputText('');
-                    setParsedItems([]);
-                    setDetectedUnits([]);
-                    setUnmatchedUnits([]);
-                    setErrorMessage(null);
-                  }}
+                  onClick={handleClearAll}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 border border-slate-700 hover:border-rose-500/40 transition cursor-pointer"
                   title="Kosongkan teks yang ditempel"
                 >
@@ -588,6 +681,100 @@ DT 03:
             </div>
           </div>
 
+          {/* CARD PENGATURAN UNIT DEFAULT & TOMBOL PENGALIH (TOGGLE SWITCH) */}
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 sm:p-4 space-y-3 shadow-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Tombol Pengalih (Toggle Switch) */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={useDefaultTruck}
+                  onClick={() => setUseDefaultTruck(!useDefaultTruck)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    useDefaultTruck ? 'bg-emerald-500' : 'bg-slate-700'
+                  }`}
+                  title="Klik untuk mengaktifkan / menonaktifkan Unit DT Default"
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-950 shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      useDefaultTruck ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-white">Pilih DT Default</span>
+                    <span
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                        useDefaultTruck
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {useDefaultTruck ? 'AKTIF (ON)' : 'NON-AKTIF (OFF)'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {useDefaultTruck
+                      ? 'Teks tanpa kode DT otomatis masuk ke unit default terpilih'
+                      : 'Murni logika otomatis. Teks tanpa kode DT disisihkan ke "Perlu Pilah Manual"'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Dropdown Pemilihan Unit DT Default */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-300 shrink-0">Unit DT Default:</label>
+                <select
+                  value={selectedDefaultTruckId}
+                  onChange={(e) => setSelectedDefaultTruckId(e.target.value)}
+                  disabled={!useDefaultTruck}
+                  className={`bg-slate-900 border rounded-xl px-3 py-1.5 text-xs font-bold transition focus:outline-none ${
+                    useDefaultTruck
+                      ? 'border-emerald-500 text-emerald-300 shadow-sm shadow-emerald-500/20 cursor-pointer'
+                      : 'border-slate-800 text-slate-500 opacity-60 cursor-not-allowed'
+                  }`}
+                >
+                  {trucks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.code} ({t.plateNumber}) - {t.driverName || 'Armada'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Banner Penjelasan Dinamis Sesuai Status Toggle (Logika 2) */}
+            <div
+              className={`p-3 rounded-xl border text-xs leading-relaxed transition ${
+                useDefaultTruck
+                  ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+                  : 'bg-slate-900/70 border-slate-800 text-slate-300'
+              }`}
+            >
+              {useDefaultTruck ? (
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-emerald-300">Kondisi Aktif (ON):</strong> Jika pada teks tempel tidak disebutkan kode DT sama sekali, sistem tidak akan menyisihkannya ke manual, melainkan langsung memasukkan seluruh biaya atau data tersebut ke nomor DT default yang Anda pilih (otomatis masuk ke{' '}
+                    <strong className="text-white underline font-mono">
+                      {trucks.find((t) => t.id === selectedDefaultTruckId)?.code || 'DT Default'}
+                    </strong>).
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-amber-300">Kondisi Non-Aktif (OFF):</strong> Sistem kembali murni mengandalkan logika otomatis. Data yang tidak memiliki kode DT yang jelas akan otomatis disisihkan ke menu <strong>"Perlu Pilah Manual"</strong>, dan hanya biaya yang memiliki kode DT yang sah saja yang akan diproses serta dibagi secara otomatis.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* TAB 1: FREEFORM TEXT PASTING */}
           {activeTab === 'freeform' && (
             <div className="space-y-3">
@@ -602,21 +789,10 @@ DT 03:
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800">
-                <div className="flex items-center gap-2 text-xs text-slate-300">
+                <div className="flex items-center gap-2 text-xs text-slate-400">
                   <Info className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Unit Default jika tidak disebut:{' '}
-                    <select
-                      value={selectedDefaultTruck}
-                      onChange={(e) => setSelectedDefaultTruck(e.target.value)}
-                      className="ml-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500"
-                    >
-                      {trucks.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.code} ({t.plateNumber}) - {t.driverName}
-                        </option>
-                      ))}
-                    </select>
+                    Format kode DT yang didukung: <strong>DT 90</strong>, <strong>DT90</strong>, <strong>dt 90</strong>, <strong>dt-90</strong>, dll.
                   </span>
                 </div>
 
@@ -625,7 +801,7 @@ DT 03:
                     <button
                       type="button"
                       onClick={handleClearAll}
-                      className="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+                      className="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition cursor-pointer"
                     >
                       Bersihkan
                     </button>
@@ -634,7 +810,7 @@ DT 03:
                     type="button"
                     onClick={handleParseText}
                     disabled={isProcessing || !inputText.trim()}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 disabled:opacity-50 transition shadow-lg shadow-emerald-500/20 shrink-0"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 disabled:opacity-50 transition shadow-lg shadow-emerald-500/20 shrink-0 cursor-pointer"
                   >
                     <Sparkles className="w-4 h-4" />
                     <span>{isProcessing ? 'Memilah Data...' : 'Pilah Data Otomatis ✨'}</span>
@@ -676,27 +852,27 @@ DT 03:
             </div>
           )}
 
-          {/* PARSED RESULTS SECTION */}
-          {parsedItems.length > 0 && (
+          {/* PARSED RESULTS SECTION (FORMAT COCOK & PERLU PILAH MANUAL) */}
+          {(parsedItems.length > 0 || manualItems.length > 0) && (
             <div className="space-y-5 pt-3 border-t border-slate-800 animate-in fade-in">
               {/* Summary Header */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 p-4 rounded-xl border border-emerald-500/30">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                     <h3 className="text-sm sm:text-base font-bold text-white">
-                      Hasil Pemilahan Otomatis: {parsedItems.length} Catatan Biaya
+                      Hasil Pemilahan: {parsedItems.length + manualItems.length} Catatan Biaya Terdeteksi
                     </h3>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Data telah dipilah per unit DT dan kategori. Periksa atau ubah baris di bawah sebelum disimpan.
+                    {parsedItems.length} baris otomatis cocok dengan unit DT &bull; {manualItems.length} baris disisihkan ke Pilah Manual.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
-                      Total Nilai Biaya
+                      Total Biaya Siap Simpan
                     </span>
                     <span className="text-lg font-mono font-black text-emerald-400">
                       {formatRupiah(grandTotalAmount)}
@@ -707,7 +883,7 @@ DT 03:
                     type="button"
                     onClick={handleSaveToDatabase}
                     disabled={isSaving || validItemsCount === 0}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg shadow-emerald-500/25 disabled:opacity-50 shrink-0"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg shadow-emerald-500/25 disabled:opacity-50 shrink-0 cursor-pointer"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>
@@ -717,179 +893,377 @@ DT 03:
                 </div>
               </div>
 
-              {/* Unit Breakdown Cards */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-emerald-400" />
-                    <span>Rekap Biaya per Unit Truk Terkait:</span>
-                  </h4>
-                  <span className="text-xs text-slate-400">
-                    {unitBreakdowns.length} Unit Terdeteksi
+              {/* Tab Switcher: Otomatis Cocok vs Perlu Pilah Manual */}
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveResultTab('valid')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                    activeResultTab === 'valid'
+                      ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Format Valid / Otomatis Cocok</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+                    activeResultTab === 'valid' ? 'bg-slate-950 text-emerald-400' : 'bg-slate-800 text-slate-300'
+                  }`}>
+                    {parsedItems.length}
                   </span>
-                </div>
+                </button>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {unitBreakdowns.map((b) => (
-                    <div
-                      key={b.truckId}
-                      className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2.5 shadow-md"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-black text-white">{b.truckCode}</span>
-                            <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-400">
-                              {b.plateNumber}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-400 mt-0.5">{b.driverName}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-xs font-mono font-bold text-emerald-300 block">
-                            {formatRupiah(b.totalAmount)}
-                          </span>
-                          <span className="text-[10px] text-slate-400">{b.totalItems} transaksi</span>
-                        </div>
-                      </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveResultTab('manual')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                    activeResultTab === 'manual'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <span>Perlu Pilah Manual</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+                    manualItems.length > 0
+                      ? activeResultTab === 'manual'
+                        ? 'bg-slate-950 text-amber-400'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {manualItems.length}
+                  </span>
+                </button>
+              </div>
 
-                      {/* Chips per Category */}
-                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-850">
-                        {CATEGORIES.map((cat) => {
-                          const amt = b.categories[cat];
-                          if (!amt || amt <= 0) return null;
-                          const colors = CATEGORY_COLORS[cat];
-                          return (
-                            <span
-                              key={cat}
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${colors.bg} ${colors.text} border ${colors.border}`}
-                            >
-                              {getCategoryIcon(cat)}
-                              <span>{cat}:</span>
-                              <strong className="font-mono">{formatRupiah(amt)}</strong>
-                            </span>
-                          );
-                        })}
-                      </div>
+              {/* KONTEN TAB 1: FORMAT VALID / OTOMATIS COCOK */}
+              {activeResultTab === 'valid' && (
+                <div className="space-y-4">
+                  {parsedItems.length === 0 ? (
+                    <div className="text-center py-10 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+                      <AlertTriangle className="w-8 h-8 mx-auto text-amber-400 opacity-80" />
+                      <p className="font-semibold text-slate-300 text-sm">Belum Ada Biaya yang Cocok Otomatis</p>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        Semua baris teks saat ini berada di tab <strong>"Perlu Pilah Manual"</strong> karena tidak menyebutkan kode DT yang sah saat tombol DT Default non-aktif.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveResultTab('manual')}
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                      >
+                        <span>Buka Tab Perlu Pilah Manual ({manualItems.length})</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  ) : (
+                    <>
+                      {/* Unit Breakdown Cards */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                            <Truck className="w-4 h-4 text-emerald-400" />
+                            <span>Rekap Biaya per Unit Truk Terkait:</span>
+                          </h4>
+                          <span className="text-xs text-slate-400">
+                            {unitBreakdowns.length} Unit Terdeteksi
+                          </span>
+                        </div>
 
-              {/* Detailed Editable Table */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                    Daftar Rincian Biaya (Dapat Diubah Sebelum Disimpan):
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    Klik dropdown untuk koreksi Unit atau Kategori jika diperlukan
-                  </span>
-                </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {unitBreakdowns.map((b) => (
+                            <div
+                              key={b.truckId}
+                              className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2.5 shadow-md"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-black text-white">{b.truckCode}</span>
+                                    <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-emerald-400">
+                                      {b.plateNumber}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-400 mt-0.5">{b.driverName}</p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-xs font-mono font-bold text-emerald-300 block">
+                                    {formatRupiah(b.totalAmount)}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">{b.totalItems} transaksi</span>
+                                </div>
+                              </div>
 
-                <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
-                        <th className="py-2.5 px-3">Tgl</th>
-                        <th className="py-2.5 px-3">Truk / Unit</th>
-                        <th className="py-2.5 px-3">Kategori Otomatis</th>
-                        <th className="py-2.5 px-3">Keterangan / Rincian</th>
-                        <th className="py-2.5 px-3">Nominal (Rp)</th>
-                        <th className="py-2.5 px-3">Vendor / Rekanan</th>
-                        <th className="py-2.5 px-3 text-center">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-850">
-                      {parsedItems.map((item, idx) => {
-                        const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
-                        return (
-                          <tr
-                            key={item.id}
-                            className={`hover:bg-slate-900/50 transition ${
-                              !item.isValid ? 'bg-rose-500/5' : ''
-                            }`}
+                              {/* Chips per Category */}
+                              <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-850">
+                                {CATEGORIES.map((cat) => {
+                                  const amt = b.categories[cat];
+                                  if (!amt || amt <= 0) return null;
+                                  const colors = CATEGORY_COLORS[cat];
+                                  return (
+                                    <span
+                                      key={cat}
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${colors.bg} ${colors.text} border ${colors.border}`}
+                                    >
+                                      {getCategoryIcon(cat)}
+                                      <span>{cat}:</span>
+                                      <strong className="font-mono">{formatRupiah(amt)}</strong>
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Detailed Editable Table */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Daftar Rincian Biaya Otomatis Cocok (Dapat Diubah Sebelum Disimpan):
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            Klik dropdown untuk koreksi Unit atau Kategori jika diperlukan
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                                <th className="py-2.5 px-3">Tgl</th>
+                                <th className="py-2.5 px-3">Truk / Unit</th>
+                                <th className="py-2.5 px-3">Kategori Otomatis</th>
+                                <th className="py-2.5 px-3">Keterangan / Rincian</th>
+                                <th className="py-2.5 px-3">Nominal (Rp)</th>
+                                <th className="py-2.5 px-3">Vendor / Rekanan</th>
+                                <th className="py-2.5 px-3 text-center">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-850">
+                              {parsedItems.map((item, idx) => {
+                                const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    className={`hover:bg-slate-900/50 transition ${
+                                      !item.isValid ? 'bg-rose-500/5' : ''
+                                    }`}
+                                  >
+                                    <td className="py-2 px-3 whitespace-nowrap text-slate-400 font-mono">
+                                      {item.date}
+                                    </td>
+
+                                    <td className="py-2 px-3 whitespace-nowrap">
+                                      <select
+                                        value={item.truckId}
+                                        onChange={(e) => handleUpdateRowTruck(idx, e.target.value)}
+                                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                                      >
+                                        {trucks.map((t) => (
+                                          <option key={t.id} value={t.id}>
+                                            {t.code} ({t.plateNumber})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+
+                                    <td className="py-2 px-3 whitespace-nowrap">
+                                      <select
+                                        value={item.category}
+                                        onChange={(e) =>
+                                          handleUpdateRowCategory(idx, e.target.value as ExpenseCategory)
+                                        }
+                                        className={`border rounded px-2 py-1 text-xs font-bold focus:outline-none bg-slate-900 ${catColor.text} ${catColor.border}`}
+                                      >
+                                        {CATEGORIES.map((c) => (
+                                          <option key={c} value={c}>
+                                            {c}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+
+                                    <td className="py-2 px-3 min-w-[200px]">
+                                      <input
+                                        type="text"
+                                        value={item.description}
+                                        onChange={(e) => handleUpdateRowDescription(idx, e.target.value)}
+                                        className="w-full bg-slate-900/70 border border-slate-750 focus:border-emerald-500 rounded px-2 py-1 text-xs text-slate-200"
+                                      />
+                                    </td>
+
+                                    <td className="py-2 px-3 whitespace-nowrap">
+                                      <input
+                                        type="text"
+                                        value={formatNumber(item.amount)}
+                                        onChange={(e) => handleUpdateRowAmount(idx, e.target.value)}
+                                        className="w-28 font-mono text-right font-bold bg-slate-900/70 border border-slate-750 focus:border-emerald-500 rounded px-2 py-1 text-xs text-emerald-400"
+                                      />
+                                    </td>
+
+                                    <td className="py-2 px-3 whitespace-nowrap text-slate-400">
+                                      <span className="truncate max-w-[140px] block" title={item.vendor}>
+                                        {item.vendor}
+                                      </span>
+                                    </td>
+
+                                    <td className="py-2 px-3 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteRow(idx)}
+                                        className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
+                                        title="Hapus baris ini"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* KONTEN TAB 2: DAFTAR "PERLU PILAH MANUAL" */}
+              {activeResultTab === 'manual' && (
+                <div className="space-y-4">
+                  {manualItems.length === 0 ? (
+                    <div className="text-center py-10 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+                      <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-400 opacity-80" />
+                      <p className="font-semibold text-slate-200 text-sm">Tidak Ada Data yang Perlu Dipilah Manual</p>
+                      <p className="text-xs text-slate-400">
+                        Seluruh data telah memiliki kode DT yang cocok dan valid.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Alert Banner Instruksi Logika 1 & 2 */}
+                      <div className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-start gap-2.5">
+                          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="font-bold text-amber-300 text-sm">
+                              Daftar "Perlu Pilah Manual" ({manualItems.length} Catatan)
+                            </h4>
+                            <p className="text-slate-300 mt-0.5">
+                              Baris-baris berikut tidak menyebutkan kode DT yang valid atau tidak ada kode DT sama sekali. Tentukan unitnya secara manual di bawah, atau gunakan tombol cepat untuk menetapkan ke satu unit sekaligus.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Bulk Action Bar */}
+                        <div className="flex items-center gap-2 bg-slate-900/90 p-2 rounded-xl border border-slate-800 shrink-0">
+                          <span className="text-slate-400 text-[11px] font-semibold">Terapkan Semua ke:</span>
+                          <select
+                            value={bulkManualTruckId}
+                            onChange={(e) => setBulkManualTruckId(e.target.value)}
+                            className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-bold"
                           >
-                            <td className="py-2 px-3 whitespace-nowrap text-slate-400 font-mono">
-                              {item.date}
-                            </td>
+                            {trucks.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.code}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleBulkAssignManual(bulkManualTruckId)}
+                            className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                          >
+                            Terapkan Semua
+                          </button>
+                        </div>
+                      </div>
 
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              <select
-                                value={item.truckId}
-                                onChange={(e) => handleUpdateRowTruck(idx, e.target.value)}
-                                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
-                              >
-                                {trucks.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.code} ({t.plateNumber})
-                                  </option>
-                                ))}
-                              </select>
-                              {item.unrecognizedUnitCode && (
-                                <span className="text-[10px] text-amber-400 block mt-0.5">
-                                  Teks asli: {item.unrecognizedUnitCode}
-                                </span>
-                              )}
-                            </td>
+                      {/* Tabel Perlu Pilah Manual */}
+                      <div className="bg-slate-950 rounded-xl border border-slate-800 overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                              <th className="py-2.5 px-3 w-8">No</th>
+                              <th className="py-2.5 px-3">Teks Asli yang Ditempel</th>
+                              <th className="py-2.5 px-3">Kategori</th>
+                              <th className="py-2.5 px-3">Nominal (Rp)</th>
+                              <th className="py-2.5 px-3">Status / Alasan Disisihkan</th>
+                              <th className="py-2.5 px-3">Pilih DT (Manual)</th>
+                              <th className="py-2.5 px-3 text-center">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850">
+                            {manualItems.map((item, idx) => {
+                              const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
+                              return (
+                                <tr key={item.id} className="hover:bg-slate-900/40 transition">
+                                  <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
 
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              <select
-                                value={item.category}
-                                onChange={(e) =>
-                                  handleUpdateRowCategory(idx, e.target.value as ExpenseCategory)
-                                }
-                                className={`border rounded px-2 py-1 text-xs font-bold focus:outline-none bg-slate-900 ${catColor.text} ${catColor.border}`}
-                              >
-                                {CATEGORIES.map((c) => (
-                                  <option key={c} value={c}>
-                                    {c}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
+                                  <td className="py-2.5 px-3 font-mono text-slate-200 max-w-xs truncate" title={item.rawText || item.description}>
+                                    {item.rawText || item.description}
+                                  </td>
 
-                            <td className="py-2 px-3 min-w-[200px]">
-                              <input
-                                type="text"
-                                value={item.description}
-                                onChange={(e) => handleUpdateRowDescription(idx, e.target.value)}
-                                className="w-full bg-slate-900/70 border border-slate-750 focus:border-emerald-500 rounded px-2 py-1 text-xs text-slate-200"
-                              />
-                            </td>
+                                  <td className="py-2.5 px-3 whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${catColor.bg} ${catColor.text} ${catColor.border}`}>
+                                      {item.category}
+                                    </span>
+                                  </td>
 
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              <input
-                                type="text"
-                                value={formatNumber(item.amount)}
-                                onChange={(e) => handleUpdateRowAmount(idx, e.target.value)}
-                                className="w-28 font-mono text-right font-bold bg-slate-900/70 border border-slate-750 focus:border-emerald-500 rounded px-2 py-1 text-xs text-emerald-400"
-                              />
-                            </td>
+                                  <td className="py-2.5 px-3 whitespace-nowrap font-mono font-bold text-emerald-400">
+                                    {formatRupiah(item.amount)}
+                                  </td>
 
-                            <td className="py-2 px-3 whitespace-nowrap text-slate-400">
-                              <span className="truncate max-w-[140px] block" title={item.vendor}>
-                                {item.vendor}
-                              </span>
-                            </td>
+                                  <td className="py-2.5 px-3 text-amber-400 text-[11px]">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                                      <Info className="w-3 h-3 text-amber-400" />
+                                      <span>{item.manualReason || 'Format kode DT tidak cocok'}</span>
+                                    </span>
+                                  </td>
 
-                            <td className="py-2 px-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteRow(idx)}
-                                className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
-                                title="Hapus baris ini"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                  <td className="py-2.5 px-3 whitespace-nowrap">
+                                    <div className="flex items-center gap-1.5">
+                                      <select
+                                        defaultValue=""
+                                        onChange={(e) => {
+                                          if (e.target.value) {
+                                            handleAssignManualItem(idx, e.target.value);
+                                          }
+                                        }}
+                                        className="bg-slate-900 border border-amber-500/50 hover:border-amber-400 rounded-lg px-2.5 py-1 text-xs text-white font-bold focus:outline-none"
+                                      >
+                                        <option value="" disabled>-- Pilih DT --</option>
+                                        {trucks.map((t) => (
+                                          <option key={t.id} value={t.id}>
+                                            {t.code} ({t.plateNumber})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </td>
+
+                                  <td className="py-2.5 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteManualItem(idx)}
+                                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition cursor-pointer"
+                                      title="Hapus baris ini dari daftar manual"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
