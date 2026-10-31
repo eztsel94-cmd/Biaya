@@ -141,7 +141,7 @@ export default function App() {
           pemuatParam !== null ||
           isPemuatHash
         ) {
-          setIsPemuatPortalMode(true);
+          setActiveTab('pemuat_portal');
           const targetName =
             namaParam ||
             (pemuatParam && pemuatParam !== 'true' && pemuatParam !== '1' ? pemuatParam : '');
@@ -307,24 +307,7 @@ export default function App() {
     setIsExcelImportOpen(true);
   };
 
-  // 3. IF IN DEDICATED ISOLATED PEMUAT PORTAL MODE:
-  // Render ONLY the daily records & trip input for loaders (100% isolated from admin modules)
-  if (isPemuatPortalMode) {
-    return (
-      <PemuatPortalView
-        initialPemuatName={pemuatPortalName}
-        onExitToAdmin={() => {
-          if (window.history.pushState) {
-            const cleanUrl = window.location.origin + window.location.pathname;
-            window.history.pushState({ path: cleanUrl }, '', cleanUrl);
-          }
-          setIsPemuatPortalMode(false);
-        }}
-      />
-    );
-  }
-
-  // 4. IF IN DEDICATED DRIVER PORTAL MODE:
+  // 3. IF IN DEDICATED DRIVER PORTAL MODE:
   // Render ONLY this driver's Dump Truck data!
   const activeDriverTruck = driverPortalTruckId
     ? trucks.find((t) => t.id === driverPortalTruckId)
@@ -485,10 +468,18 @@ service cloud.firestore {
 
         {activeTab === 'daily_records' && (
           <DailyRecordsView
+            trucks={trucks}
             onOpenPemuatPortal={(pemuatName) => {
               if (pemuatName) setPemuatPortalName(pemuatName);
-              setIsPemuatPortalMode(true);
+              setActiveTab('pemuat_portal');
             }}
+          />
+        )}
+
+        {activeTab === 'pemuat_portal' && (
+          <PemuatPortalView
+            trucks={trucks}
+            initialPemuatName={pemuatPortalName}
           />
         )}
 

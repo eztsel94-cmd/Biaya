@@ -959,7 +959,7 @@ DT 90:
                 </div>
               </div>
 
-              {/* Tab Switcher: Otomatis Cocok vs Data Tidak Cocok */}
+              {/* Tab Switcher: Otomatis Cocok vs Sampah / Perlu Pilah Manual */}
               <div className="flex items-center gap-2 border-b border-slate-800 pb-2 flex-wrap">
                 <button
                   type="button"
@@ -971,7 +971,7 @@ DT 90:
                   }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Format Valid / Otomatis Cocok</span>
+                  <span>Format Cocok (DT 90)</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
                     activeResultTab === 'valid' ? 'bg-slate-950 text-emerald-400' : 'bg-slate-800 text-slate-300'
                   }`}>
@@ -984,17 +984,17 @@ DT 90:
                   onClick={() => setActiveResultTab('manual')}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
                     activeResultTab === 'manual'
-                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      ? 'bg-rose-500 text-slate-950 shadow-md shadow-rose-500/20'
                       : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
                   }`}
                 >
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  <span>Data Tidak Cocok / Edit Manual</span>
+                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <span>Sampah / Perlu Pilah Manual</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
                     manualItems.length > 0
                       ? activeResultTab === 'manual'
-                        ? 'bg-slate-950 text-amber-400'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        ? 'bg-slate-950 text-rose-400'
+                        : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                       : 'bg-slate-800 text-slate-400'
                   }`}>
                     {manualItems.length}
@@ -1214,28 +1214,28 @@ DT 90:
                     </div>
                   ) : (
                     <>
-                      {/* Banner Fitur Data Tidak Cocok */}
-                      <div className="bg-amber-950/25 border border-amber-500/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      {/* Banner Fitur Sampah & Pilah Manual */}
+                      <div className="bg-rose-950/25 border border-rose-500/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
                         <div className="flex items-start gap-2.5">
-                          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                          <Trash2 className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-bold text-amber-300 text-sm">
-                                Fitur Data Tidak Cocok ({manualItems.length} Catatan)
+                              <h4 className="font-bold text-rose-300 text-sm">
+                                Sampah / Perlu Pilah Manual ({manualItems.length} Catatan)
                               </h4>
                               {manualItems.some((i) => Boolean(i.unrecognizedUnitCode)) && (
                                 <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                                  {manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length} kode unit tidak terdaftar di database
+                                  {manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length} kode unit tidak ada di armada
                                 </span>
                               )}
                               {manualItems.some((i) => !i.unrecognizedUnitCode) && (
                                 <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                  {manualItems.filter((i) => !i.unrecognizedUnitCode).length} tanpa kode DT
+                                  {manualItems.filter((i) => !i.unrecognizedUnitCode).length} format berbeda dari contoh (DT 90)
                                 </span>
                               )}
                             </div>
                             <p className="text-slate-300 mt-1 leading-relaxed">
-                              Data yang memiliki kode unit tetapi tidak cocok dengan unit database <strong>TIDAK dimasukkan sembarangan</strong> ke unit default agar tidak menambah pekerjaan Anda. Anda dapat mengedit tanggal, kategori, rincian, dan nominal biaya secara manual di bawah, atau langsung mencocokkannya ke unit yang ada.
+                              Sistem hanya membaca kode DT dan nomor unitnya saja seperti <strong>(DT 90)</strong>. Semua baris yang berbeda otomatis disisihkan ke sini (tidak dimasukkan sembarangan ke unit lain) agar Anda dapat memeriksa dan mengeditnya secara manual.
                             </p>
                           </div>
                         </div>

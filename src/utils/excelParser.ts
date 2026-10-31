@@ -217,82 +217,51 @@ export function detectCategory(text: string): ExpenseCategory {
 }
 
 /**
- * Intelligent Truck matching
- * Robustly matches: "DT 90", "DT90", "dt 90", "dt90", "DT-90", "dt-90", "DT_90", "Unit 90", "90", "DT 01", "BM 8456 TBS", or driver name
+ * Strict DT code extractor:
+ * Hanya melihat kode DT dan nomor unitnya saja, contoh: (DT 90), DT 90, dt 90, DT90, dt90, DT-90.
+ * Tidak ada penambahan kata kunci lain (tidak mencocokkan plat nomor, nama supir, atau istilah lain).
+ * Jika berbeda dari contoh di atas, return null agar otomatis disisihkan ke sampah/pilah manual.
  */
-export function matchTruck(text: string, trucks: TruckUnit[]): TruckUnit | null {
-  if (!text || trucks.length === 0) return null;
-  const clean = text.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  // 1. Direct ID match
-  const byId = trucks.find((t) => t.id.toLowerCase() === clean);
-  if (byId) return byId;
-
-  // 2. Exact or clean code match ("unit01", "unit90", "dt01", "dt90", "90", "01")
-  for (const truck of trucks) {
-    const truckCodeClean = truck.code.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const numOnly = truck.code.replace(/[^0-9]/g, '');
-
-    if (truckCodeClean === clean) return truck;
-    if (numOnly && clean === numOnly) return truck;
-    if (clean === `dt${numOnly}` || clean === `unit${numOnly}`) return truck;
-    if (clean === `dumptruck${numOnly}` || clean === `dtruck${numOnly}`) return truck;
-  }
-
-  // 3. Plate number match (e.g. "BM 8456 TBS" -> "bm8456tbs" or "8456")
-  for (const truck of trucks) {
-    const plateClean = truck.plateNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const plateNumOnly = truck.plateNumber.replace(/[^0-9]/g, '');
-
-    if (clean.includes(plateClean) || plateClean.includes(clean)) return truck;
-    if (plateNumOnly && clean.includes(plateNumOnly)) return truck;
-  }
-
-  // 4. Regex pattern match for Unit / DT numbers in mixed text:
-  // Catches: DT 90, DT90, dt 90, dt90, DT-90, dt-90, DT_90, dt_90, Unit 90, unit90, etc.
-  for (const truck of trucks) {
-    const numOnly = truck.code.replace(/[^0-9]/g, '');
-    if (numOnly) {
-      const normalizedNum = String(parseInt(numOnly, 10));
-      // Matches "dt90", "dt 90", "dt-90", "dt_90", "unit90", "dt 090", "dt.90", etc.
-      const unitPattern = new RegExp(
-        `(?:^|[\\s(_\\[:-])(?:dt|unit|dump\\s*truck|truk|armada)[\\s_.-]*0*${normalizedNum}(?:$|[\\s)_\\]:;,-])`,
-        'i'
-      );
-      if (unitPattern.test(text)) {
-        return truck;
-      }
-      // Also match standalone isolated number if prefixed by # or no.
-      const isolatedPattern = new RegExp(`(?:#|no\\.?\\s*)0*${normalizedNum}(?:\\b|[^0-9a-zA-Z]|$)`, 'i');
-      if (isolatedPattern.test(text)) {
-        return truck;
-      }
+export function extractRawUnitCode(text: string): string | null {
+  if (!text) return null;
+  // Strictly matches patterns like: (DT 90), [DT 90], DT 90, DT90, dt 90, dt90, DT-90, dt-90
+  const match = text.match(/(?:^|[\s(\[#_:\/-])dt[\s._-]*([0-9]{1,4})(?:$|[\s)\]:;,\/-])/i);
+  if (match) {
+    const rawDigits = match[1].trim();
+    const numVal = parseInt(rawDigits, 10);
+    if (!isNaN(numVal)) {
+      const formattedNum = numVal < 10 && rawDigits.length === 1 ? `0${numVal}` : rawDigits;
+      return `DT ${formattedNum}`;
     }
   }
-
-  // 5. Driver name match
-  for (const truck of trucks) {
-    const driverClean = truck.driverName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (driverClean && (clean.includes(driverClean) || driverClean.includes(clean))) {
-      return truck;
-    }
-  }
-
   return null;
 }
 
 /**
- * Extract Unit code pattern from text even if not yet in database
- * e.g. "DT 90", "DT90", "dt 90", "dt-90", "Unit 04"
+ * Strict Truck matching:
+ * Hanya melihat kode DT dan nomor unitnya saja (contoh: DT 90).
+ * Jika ada kode DT dan nomornya cocok dengan unit yang terdaftar di armada (trucks), return unit truk tersebut.
+ * Jika nomor DT tidak terdaftar di armada atau tidak memiliki kode DT, return null.
  */
-export function extractRawUnitCode(text: string): string | null {
-  if (!text) return null;
-  // Catches "dt 90", "dt90", "DT-90", "dt_90", "unit 90", etc.
-  const match = text.match(/(?:^|[\s(_\[:-])(?:dt|unit|dump\s*truck|armada)[\s_.-]*([0-9]{1,3}[a-zA-Z]?)(?:$|[\s)_\]:;,-])/i);
-  if (match) {
-    const num = match[1].trim();
-    return `DT ${num.padStart(2, '0')}`;
+export function matchTruck(text: string, trucks: TruckUnit[]): TruckUnit | null {
+  if (!text || trucks.length === 0) return null;
+
+  // 1. Ekstraksi kode DT dengan pola ketat saja (DT 90)
+  const rawCode = extractRawUnitCode(text);
+  if (!rawCode) return null;
+
+  const numMatch = rawCode.match(/[0-9]+/);
+  if (!numMatch) return null;
+  const targetNum = parseInt(numMatch[0], 10);
+
+  // 2. Cocokkan nomor DT dengan daftar unit armada yang ada
+  for (const truck of trucks) {
+    const truckNumMatch = truck.code.match(/[0-9]+/);
+    if (truckNumMatch && parseInt(truckNumMatch[0], 10) === targetNum) {
+      return truck;
+    }
   }
+
   return null;
 }
 
@@ -578,10 +547,10 @@ export function parseFreeformNotes(
         invoiceNumber,
         isValid: false,
         needsManualReview: true,
-        manualReason: `Kode unit "${lineRawCode}" terdeteksi lengkap, namun tidak ada persamaan dengan unit yang tersedia di database.`,
+        manualReason: `Kode unit "${lineRawCode}" ditemukan, namun tidak ada unit yang cocok di daftar armada. Otomatis masuk ke sampah / pilah manual agar bisa diedit kembali.`,
       });
     } else {
-      // BARIS TIDAK MEMILIKI KODE DT SAMA SEKALI
+      // BARIS DENGAN FORMAT BERBEDA DARI CONTOH (DT 90) ATAU TANPA KODE DT
       manualItems.push({
         id: `manual-nocode-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         rawIndex: idx,
@@ -596,7 +565,7 @@ export function parseFreeformNotes(
         invoiceNumber,
         isValid: false,
         needsManualReview: true,
-        manualReason: 'Format tidak menyebutkan kode DT sama sekali (Format tidak valid / tidak ada kode)',
+        manualReason: 'Format berbeda dengan contoh (DT 90). Otomatis dibuang ke sampah / pilah manual agar bisa diedit kembali.',
       });
     }
   }
@@ -677,8 +646,8 @@ function cleanExpenseDescription(line: string, category: ExpenseCategory): strin
     // Remove bullets and numbers at start
     .replace(/^[\s*\-•>#]+/, '')
     .replace(/^[0-9]+[.)]\s*/, '')
-    // Remove explicit unit prefixes like "DT 90:", "Unit 90 -", "[DT 90]"
-    .replace(/(?:dt|unit|dump\s*truck)[-\s]*[0-9]{1,3}[:\s\-]*/i, '')
+    // Remove explicit unit prefixes like "(DT 90)", "DT 90:", "dt 90 -", "[DT 90]"
+    .replace(/(?:\(?\s*dt\s*\)?)[\s._-]*[0-9]{1,4}[:\s\-]*/i, '')
     // Remove amount patterns
     .replace(/(?:rp\.?|idr)\s*[0-9.,]+(?:\s*(?:jt|juta|rb|k|ribu))?/gi, '')
     .replace(/[0-9]+(?:[.,][0-9]+)?\s*(?:jt|juta|rb|k|ribu)\b/gi, '')

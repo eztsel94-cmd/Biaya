@@ -54,6 +54,7 @@ export const COLLECTIONS = {
   EXPENSES: "expenses",
   DAILY_RECORDS: "catatan_harian_tbs",
   USERS: "system_users",
+  PEMUAT: "pemuat_master",
 };
 
 // Alias untuk DailyRecordsView
@@ -63,6 +64,7 @@ export const trucksCollection = collection(db, COLLECTIONS.TRUCKS);
 export const expensesCollection = collection(db, COLLECTIONS.EXPENSES);
 export const dailyRecordsCollection = collection(db, COLLECTIONS.DAILY_RECORDS);
 export const usersCollection = collection(db, COLLECTIONS.USERS);
+export const pemuatCollection = collection(db, COLLECTIONS.PEMUAT);
 
 // Status error izin akses global (missing permissions)
 export let firestorePermissionError: string | null = null;
@@ -448,6 +450,99 @@ export async function updateDailyRecord(record: DailyRecord): Promise<void> {
     notes: (record.notes || "").trim(),
     updatedAt: serverTimestamp(),
   });
+}
+
+// ==========================================
+// 3B. MASTER NAMA PEMUAT TBS (Otomatis & Real-time)
+// ==========================================
+
+export const INITIAL_DEFAULT_PEMUAT = [
+  "Anton",
+  "Bambang",
+  "Candra",
+  "Dedik",
+  "Eko",
+  "Suryanto",
+];
+
+let isPemuatBootstrapped = false;
+
+export async function bootstrapInitialPemuat(): Promise<void> {
+  if (isPemuatBootstrapped) return;
+  try {
+    const snap = await getDocs(pemuatCollection);
+    if (snap.empty) {
+      const batch = writeBatch(db);
+      for (const name of INITIAL_DEFAULT_PEMUAT) {
+        const docRef = doc(pemuatCollection);
+        batch.set(docRef, {
+          name: name.trim(),
+          createdAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+    isPemuatBootstrapped = true;
+  } catch (err) {
+    console.warn("Bootstrap pemuat notice:", err);
+  }
+}
+
+export function subscribeToFirestorePemuat(
+  onData: (pemuat: Array<{ id: string; name: string }>) => void,
+  onError?: (error: Error) => void
+): Unsubscribe {
+  try {
+    bootstrapInitialPemuat();
+    const q = query(pemuatCollection, orderBy("name", "asc"));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        setPermissionError(null);
+        const list: Array<{ id: string; name: string }> = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (d.name) {
+            list.push({
+              id: docSnap.id,
+              name: String(d.name).trim(),
+            });
+          }
+        });
+
+        // Jika Firestore masih kosong, berikan fallback default
+        if (list.length === 0) {
+          onData(INITIAL_DEFAULT_PEMUAT.map((n, i) => ({ id: `default-${i}`, name: n })));
+        } else {
+          onData(list);
+        }
+      },
+      (error) => {
+        console.error("Firebase pemuat onSnapshot error:", error);
+        setPermissionError(error);
+        if (onError) onError(error);
+      }
+    );
+  } catch (err: any) {
+    setPermissionError(err);
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+export async function addPemuatFirestore(name: string): Promise<string> {
+  const cleanName = name.trim();
+  if (!cleanName) throw new Error("Nama pemuat tidak boleh kosong");
+  const docRef = await addDoc(pemuatCollection, {
+    name: cleanName,
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+export async function deletePemuatFirestore(id: string): Promise<void> {
+  const targetDoc = doc(db, COLLECTIONS.PEMUAT, id);
+  await deleteDoc(targetDoc);
 }
 
 // ==========================================

@@ -30,31 +30,57 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DailyRecord, NewDailyRecord } from '../types/dailyRecord';
+import { TruckUnit } from '../types/truck';
 import {
   subscribeToDailyRecords,
   addDailyRecord,
   updateDailyRecord,
   deleteDailyRecord,
   clearAllDemoDataFirestore,
+  subscribeToFirestorePemuat,
+  addPemuatFirestore,
+  deletePemuatFirestore,
   COLLECTION_NAME,
 } from '../services/firebase';
 import { SharePemuatModal } from './SharePemuatModal';
+import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl } from '../utils/driverLink';
 
 const QUICK_TRUCKS = ['DT 90', 'DT 01', 'DT 02', 'DT 03', 'DT 05', 'DT 08', 'DT 10', 'DT 12'];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
 
 interface DailyRecordsViewProps {
+  trucks?: TruckUnit[];
   onOpenPemuatPortal?: (pemuatName?: string) => void;
 }
 
-export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuatPortal }) => {
+export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [], onOpenPemuatPortal }) => {
   // State data dari Firestore
   const [records, setRecords] = useState<DailyRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Master Pemuat & Modal Tambah Manual (Tersimpan permanen di cloud)
+  const [pemuatMaster, setPemuatMaster] = useState<Array<{ id: string; name: string }>>([]);
+  const [isPemuatManagerOpen, setIsPemuatManagerOpen] = useState(false);
+
+  // Dynamic Truck Unit Sesuai yang Terdata di Armada
+  const dynamicTruckCodes = useMemo(() => {
+    if (trucks && trucks.length > 0) {
+      return trucks.map((t) => t.code);
+    }
+    return QUICK_TRUCKS;
+  }, [trucks]);
+
+  // Berlangganan Master Nama Pemuat dari Firestore
+  useEffect(() => {
+    const unsub = subscribeToFirestorePemuat((list) => {
+      setPemuatMaster(list);
+    });
+    return () => unsub();
+  }, []);
 
   // Form State Input Baru (Default Contoh Cepat untuk Kemudahan Input)
   const todayStr = new Date().toISOString().split('T')[0];
@@ -641,20 +667,28 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuat
                     <Truck className="w-3.5 h-3.5 text-emerald-400" />
                     Nomor Unit Truk
                   </label>
-                  <span className="text-[11px] text-slate-400">Contoh: DT 90</span>
+                  <span className="text-[10px] text-emerald-400 font-medium">
+                    Otomatis dari Armada ({dynamicTruckCodes.length} Unit)
+                  </span>
                 </div>
                 <input
                   type="text"
+                  list="daily-truck-codes-list"
                   placeholder="Ketik atau pilih (cth: DT 90)"
                   value={formData.truckNumber}
                   onChange={(e) => setFormData({ ...formData, truckNumber: e.target.value })}
                   required
                   className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-semibold text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
                 />
+                <datalist id="daily-truck-codes-list">
+                  {dynamicTruckCodes.map((dt) => (
+                    <option key={dt} value={dt} />
+                  ))}
+                </datalist>
 
-                {/* Tombol Cepat Pilihan DT */}
+                {/* Tombol Cepat Pilihan DT Sesuai Armada */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {QUICK_TRUCKS.map((dt) => (
+                  {dynamicTruckCodes.map((dt) => (
                     <button
                       key={dt}
                       type="button"
@@ -671,20 +705,55 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuat
                 </div>
               </div>
 
-              {/* Nama Pemuat */}
+              {/* Nama Pemuat (Fitur Otomatis & Tambah Manual) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-emerald-400" />
-                  Nama Pemuat
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-emerald-400" />
+                    Nama Pemuat
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsPemuatManagerOpen(true)}
+                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 cursor-pointer"
+                    title="Tulis nama pemuat manual agar tersimpan di fitur otomatis"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>+ Tulis / Kelola Pemuat</span>
+                  </button>
+                </div>
                 <input
                   type="text"
-                  placeholder="Contoh: Anton / Bambang"
+                  list="daily-pemuat-master-list"
+                  placeholder="Ketik nama atau pilih tombol di bawah..."
                   value={formData.driverName}
                   onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
                   required
                   className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
                 />
+                <datalist id="daily-pemuat-master-list">
+                  {pemuatMaster.map((p) => (
+                    <option key={p.id} value={p.name} />
+                  ))}
+                </datalist>
+
+                {/* Tombol Cepat Otomatis Nama Pemuat */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {pemuatMaster.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, driverName: p.name })}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
+                        formData.driverName === p.name
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                      }`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Tonase (Ton) */}
@@ -1406,6 +1475,16 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuat
             window.open(url, '_blank');
           }
         }}
+      />
+
+      {/* Modal Kelola / Tulis Nama Pemuat Baru Manual */}
+      <PemuatManagerModal
+        isOpen={isPemuatManagerOpen}
+        onClose={() => setIsPemuatManagerOpen(false)}
+        pemuatList={pemuatMaster}
+        onAddPemuat={addPemuatFirestore}
+        onDeletePemuat={deletePemuatFirestore}
+        onSelectPemuat={(name) => setFormData((prev) => ({ ...prev, driverName: name }))}
       />
     </div>
   );

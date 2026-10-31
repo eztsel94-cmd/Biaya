@@ -35,12 +35,17 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DailyRecord, NewDailyRecord } from '../types/dailyRecord';
+import { TruckUnit } from '../types/truck';
 import {
   subscribeToDailyRecords,
   addDailyRecord,
   updateDailyRecord,
   deleteDailyRecord,
+  subscribeToFirestorePemuat,
+  addPemuatFirestore,
+  deletePemuatFirestore,
 } from '../services/firebase';
+import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl } from '../utils/driverLink';
 
 const QUICK_TRUCKS = ['DT 90', 'DT 01', 'DT 02', 'DT 03', 'DT 05', 'DT 08', 'DT 10', 'DT 12'];
@@ -64,11 +69,13 @@ export function formatDateIndoFull(dateStr: string): string {
 }
 
 interface PemuatPortalViewProps {
+  trucks?: TruckUnit[];
   initialPemuatName?: string;
   onExitToAdmin?: () => void;
 }
 
 export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
+  trucks = [],
   initialPemuatName,
   onExitToAdmin,
 }) => {
@@ -77,6 +84,25 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Dynamic Truck codes dari data armada yang terdaftar
+  const dynamicTruckCodes = useMemo(() => {
+    if (trucks && trucks.length > 0) {
+      return trucks.map((t) => t.code);
+    }
+    return QUICK_TRUCKS;
+  }, [trucks]);
+
+  // Master Nama Pemuat dari Firestore
+  const [pemuatMaster, setPemuatMaster] = useState<Array<{ id: string; name: string }>>([]);
+  const [isPemuatManagerOpen, setIsPemuatManagerOpen] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToFirestorePemuat((list) => {
+      setPemuatMaster(list);
+    });
+    return () => unsub();
+  }, []);
 
   // Active Pemuat profile
   const [activePemuat, setActivePemuat] = useState<string>(initialPemuatName || 'Anton');
