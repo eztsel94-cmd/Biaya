@@ -519,9 +519,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         </div>
       </div>
 
-      {/* TABEL SEMUA CATATAN BIAYA */}
+      {/* TABEL & DAFTAR SEMUA CATATAN BIAYA */}
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 shadow-md overflow-hidden">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-white">Daftar Catatan Pengeluaran</span>
             <span className="text-xs text-slate-400 font-mono">
@@ -530,7 +530,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
           </div>
 
           <span className="text-xs text-slate-400">
-            Total Halaman Ini: <strong className="text-emerald-400 font-mono">{formatRupiah(visibleTotal)}</strong>
+            Total Ditampilkan: <strong className="text-emerald-400 font-mono">{formatRupiah(visibleTotal)}</strong>
           </span>
         </div>
 
@@ -551,92 +551,175 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-4 font-semibold">Tanggal</th>
-                  <th className="py-3 px-4 font-semibold">Unit Truk</th>
-                  <th className="py-3 px-4 font-semibold">Kategori</th>
-                  <th className="py-3 px-4 font-semibold">Keterangan</th>
-                  <th className="py-3 px-4 font-semibold">Vendor / Bengkel</th>
-                  <th className="py-3 px-4 font-semibold">No Nota</th>
-                  <th className="py-3 px-4 font-semibold text-right">Jumlah Biaya</th>
-                  <th className="py-3 px-4 font-semibold text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 font-medium">
-                {filteredExpenses.map((item) => {
-                  const truck = trucks.find((t) => t.id === item.truckId);
-                  const colors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
+          <div>
+            {/* Mobile View: High density cards for smartphone (md:hidden) */}
+            <div className="md:hidden divide-y divide-slate-800/80">
+              {filteredExpenses.map((item) => {
+                const truck = trucks.find((t) => t.id === item.truckId);
+                const colors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
 
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-800/40 transition">
-                      <td className="py-3 px-4 text-slate-300 whitespace-nowrap font-mono text-[11px]">
-                        {formatDateIndo(item.date)}
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-white">{truck?.code || 'Unit'}</span>
-                          <span className="text-[10px] text-slate-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
-                            {truck?.plateNumber || '-'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} border ${colors.border}`}
-                        >
-                          {item.category}
+                return (
+                  <div key={item.id} className="p-4 space-y-2.5 hover:bg-slate-800/30 transition">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white text-xs">{truck?.code || 'Unit'}</span>
+                        <span className="text-[10px] text-slate-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
+                          {truck?.plateNumber || '-'}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-200 min-w-[200px] max-w-xs">
-                        <p className="line-clamp-2">{item.description}</p>
-                      </td>
-                      <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
-                        {item.vendor}
-                      </td>
-                      <td className="py-3 px-4 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                        {item.invoiceNumber || '-'}
-                      </td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} border ${colors.border}`}
+                      >
+                        {item.category}
+                      </span>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-slate-200 line-clamp-2">{item.description}</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                      <span className="font-mono text-slate-400">{formatDateIndo(item.date)}</span>
+                      <span>•</span>
+                      <span className="text-slate-300 truncate max-w-[150px]">{item.vendor}</span>
+                      {item.invoiceNumber && (
+                        <>
+                          <span>•</span>
+                          <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">
+                            Nota: {item.invoiceNumber}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Nominal Biaya:</span>
                         <span className="font-bold text-emerald-400 font-mono text-sm">
                           {formatRupiah(item.amount)}
                         </span>
-                      </td>
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        {currentUser.role === 'admin' ? (
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => setEditingExpense(item)}
-                              title="Edit Catatan (Khusus Role Admin)"
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirmId(item.id)}
-                              title="Hapus Catatan (Khusus Role Admin)"
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div
-                            title={`Akses Terbatas: Hanya Role Admin yang berwenang mengubah data biaya ini. Role aktif Anda: ${currentUser.roleLabel}`}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 text-slate-400 border border-slate-700/60 text-[10px] cursor-not-allowed"
+                      </div>
+
+                      {currentUser.role === 'admin' ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setEditingExpense(item)}
+                            title="Edit Catatan"
+                            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
                           >
-                            <Lock className="w-3 h-3 text-amber-400/80" />
-                            <span>Terkunci</span>
+                            <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(item.id)}
+                            title="Hapus Catatan"
+                            className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          title="Hanya Role Admin yang berwenang mengubah biaya"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 text-slate-400 border border-slate-700/60 text-[10px]"
+                        >
+                          <Lock className="w-3 h-3 text-amber-400/80" />
+                          <span>Terkunci</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop View: Full Data Table (hidden on mobile, block on md+) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-800/50 border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-4 font-semibold">Tanggal</th>
+                    <th className="py-3 px-4 font-semibold">Unit Truk</th>
+                    <th className="py-3 px-4 font-semibold">Kategori</th>
+                    <th className="py-3 px-4 font-semibold">Keterangan</th>
+                    <th className="py-3 px-4 font-semibold">Vendor / Bengkel</th>
+                    <th className="py-3 px-4 font-semibold">No Nota</th>
+                    <th className="py-3 px-4 font-semibold text-right">Jumlah Biaya</th>
+                    <th className="py-3 px-4 font-semibold text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {filteredExpenses.map((item) => {
+                    const truck = trucks.find((t) => t.id === item.truckId);
+                    const colors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Sparepart;
+
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                        <td className="py-3 px-4 text-slate-300 whitespace-nowrap font-mono text-[11px]">
+                          {formatDateIndo(item.date)}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white">{truck?.code || 'Unit'}</span>
+                            <span className="text-[10px] text-slate-400 font-mono bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
+                              {truck?.plateNumber || '-'}
+                            </span>
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${colors.bg} ${colors.text} border ${colors.border}`}
+                          >
+                            {item.category}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-200 min-w-[200px] max-w-xs">
+                          <p className="line-clamp-2">{item.description}</p>
+                        </td>
+                        <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
+                          {item.vendor}
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 whitespace-nowrap font-mono text-[11px]">
+                          {item.invoiceNumber || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <span className="font-bold text-emerald-400 font-mono text-sm">
+                            {formatRupiah(item.amount)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          {currentUser.role === 'admin' ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => setEditingExpense(item)}
+                                title="Edit Catatan (Khusus Role Admin)"
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(item.id)}
+                                title="Hapus Catatan (Khusus Role Admin)"
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              title={`Akses Terbatas: Hanya Role Admin yang berwenang mengubah data biaya ini. Role aktif Anda: ${currentUser.roleLabel}`}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 text-slate-400 border border-slate-700/60 text-[10px] cursor-not-allowed"
+                            >
+                              <Lock className="w-3 h-3 text-amber-400/80" />
+                              <span>Terkunci</span>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

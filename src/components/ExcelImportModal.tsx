@@ -783,8 +783,8 @@ DT 90:
                   </div>
                   <p className="text-[11px] text-slate-400">
                     {useDefaultTruck
-                      ? 'Teks tanpa kode DT otomatis masuk ke unit default terpilih'
-                      : 'Murni logika otomatis. Teks tanpa kode DT disisihkan ke "Perlu Pilah Manual"'}
+                      ? 'Semua biaya langsung dimasukkan ke unit DT terpilih tanpa melihat kode'
+                      : 'Murni logika otomatis. Kode cocok masuk unit, kode tak cocok/tanpa kode masuk ke Data Tidak Cocok'}
                   </p>
                 </div>
               </div>
@@ -811,7 +811,7 @@ DT 90:
               </div>
             </div>
 
-            {/* Banner Penjelasan Dinamis Sesuai Status Toggle (Logika 2) */}
+            {/* Banner Penjelasan Dinamis Sesuai Status Toggle */}
             <div
               className={`p-3 rounded-xl border text-xs leading-relaxed transition ${
                 useDefaultTruck
@@ -823,17 +823,18 @@ DT 90:
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-emerald-300">Kondisi Aktif (ON):</strong> Jika pada teks tempel tidak disebutkan kode DT sama sekali, sistem tidak akan menyisihkannya ke manual, melainkan langsung memasukkan seluruh biaya atau data tersebut ke nomor DT default yang Anda pilih (otomatis masuk ke{' '}
+                    <strong className="text-emerald-300">Kondisi Aktif (ON):</strong> Seluruh biaya yang ditempel otomatis langsung dimasukkan ke nomor DT default yang Anda pilih (
                     <strong className="text-white underline font-mono">
                       {trucks.find((t) => t.id === selectedDefaultTruckId)?.code || 'DT Default'}
-                    </strong>).
+                    </strong>
+                    ), <strong>tanpa melihat kode apapun</strong> di dalam teks.
                   </div>
                 </div>
               ) : (
                 <div className="flex items-start gap-2">
                   <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-amber-300">Kondisi Non-Aktif (OFF):</strong> Sistem kembali murni mengandalkan logika otomatis. Data yang tidak memiliki kode DT yang jelas akan otomatis disisihkan ke menu <strong>"Perlu Pilah Manual"</strong>, dan hanya biaya yang memiliki kode DT yang sah saja yang akan diproses serta dibagi secara otomatis.
+                    <strong className="text-amber-300">Kondisi Non-Aktif (OFF):</strong> Sistem murni memeriksa kode DT. Kode yang cocok otomatis masuk ke unit masing-masing. Kode yang tidak cocok di database atau baris tanpa kode akan disisihkan ke menu <strong>"Data Tidak Cocok / Edit Manual"</strong> agar tidak masuk sembarangan.
                   </div>
                 </div>
               )}
@@ -1480,7 +1481,7 @@ DT 90:
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -1494,11 +1495,11 @@ DT 90:
               type="button"
               onClick={handleSaveToDatabase}
               disabled={isSaving || validItemsCount === 0}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
             >
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>
-                {isSaving ? 'Menyimpan...' : `Simpan ${validItemsCount} Catatan ke Database`}
+                {isSaving ? 'Menyimpan...' : `Simpan ${validItemsCount} Catatan`}
               </span>
             </button>
           )}

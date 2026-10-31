@@ -113,11 +113,11 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onOpenExcelImport && (
             <button
               onClick={() => onOpenExcelImport()}
-              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 rounded-xl font-semibold text-xs sm:text-sm border border-emerald-500/40 hover:border-emerald-500 transition shadow-sm"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 rounded-xl font-semibold text-xs sm:text-sm border border-emerald-500/40 hover:border-emerald-500 transition shadow-sm"
               title="Import data biaya dari file atau tempel Excel"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
@@ -126,14 +126,14 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
           )}
           <button
             onClick={onOpenDataManager}
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold text-xs sm:text-sm border border-slate-700 transition"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-semibold text-xs sm:text-sm border border-slate-700 transition"
           >
             <Database className="w-4 h-4 text-emerald-400" />
-            Kelola di Data Manager
+            <span className="hidden sm:inline">Kelola di </span>Data Manager
           </button>
           <button
             onClick={() => onOpenAddExpense()}
-            className="flex items-center gap-2 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-500/20"
+            className="flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-500/20"
           >
             <PlusCircle className="w-4 h-4" />
             Catat Biaya

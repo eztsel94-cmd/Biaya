@@ -160,9 +160,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 4 Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Cost */}
-        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900/80 rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Total Biaya Armada
@@ -171,7 +171,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
             {formatRupiah(totalCost)}
           </div>
           <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
@@ -181,7 +181,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Jumlah Unit */}
-        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900/80 rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Jumlah Unit Armada
@@ -190,7 +190,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Truck className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight flex items-baseline gap-2">
+          <div className="text-xl sm:text-2xl font-extrabold text-white tracking-tight flex items-baseline gap-2">
             <span>{truckCount} Unit</span>
             <span className="text-xs font-normal text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
               Truk TBS
@@ -202,7 +202,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Rata-rata Biaya per Unit */}
-        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900/80 rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Rata-rata Biaya / Unit
@@ -211,7 +211,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Layers className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
             {formatRupiah(avgCostPerTruck)}
           </div>
           <p className="text-xs text-slate-400 mt-1">
@@ -220,7 +220,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Kategori Pengeluaran Terbesar */}
-        <div className="bg-slate-900/80 rounded-2xl p-5 border border-slate-800 shadow-sm relative overflow-hidden">
+        <div className="bg-slate-900/80 rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Biaya Tertinggi
@@ -229,7 +229,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {getCategoryIcon(topCategory)}
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-amber-400 tracking-tight">
+          <div className="text-xl sm:text-2xl font-extrabold text-amber-400 tracking-tight">
             {topCategory || '-'}
           </div>
           <p className="text-xs text-slate-400 mt-1">
@@ -324,7 +324,68 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile View: Kartu Biaya Tiap Unit (md:hidden) */}
+            <div className="md:hidden space-y-3">
+              {truckExpenseMap.map(({ truck, unitTotal, percentOfAll, byCat }) => (
+                <div
+                  key={truck.id}
+                  onClick={() => onSelectTruck(truck.id)}
+                  className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-emerald-500/40 transition cursor-pointer space-y-2.5 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-emerald-400 text-sm">
+                        {truck.code}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 font-mono border border-slate-700">
+                        {truck.plateNumber}
+                      </span>
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                          truck.status === 'Aktif'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : truck.status === 'Perawatan'
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                        }`}
+                      >
+                        {truck.status}
+                      </span>
+                    </div>
+
+                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded">
+                      {percentOfAll.toFixed(1)}% total
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-300">
+                    <span>Supir: <strong className="text-white">{truck.driverName}</strong></span>
+                    <span className="font-mono font-black text-emerald-400 text-sm">
+                      {formatRupiah(unitTotal)}
+                    </span>
+                  </div>
+
+                  {/* 3 Pos Biaya Utama Mobile */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-900 text-[10px] font-mono">
+                    <div className="bg-slate-900/90 p-1.5 rounded text-center">
+                      <span className="text-slate-500 block text-[9px] uppercase">Part</span>
+                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Sparepart)}</span>
+                    </div>
+                    <div className="bg-slate-900/90 p-1.5 rounded text-center">
+                      <span className="text-slate-500 block text-[9px] uppercase">Oli</span>
+                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Oli)}</span>
+                    </div>
+                    <div className="bg-slate-900/90 p-1.5 rounded text-center">
+                      <span className="text-slate-500 block text-[9px] uppercase">Solar</span>
+                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Minyak)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View: Full 8-column Table (hidden on mobile, block on md+) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">

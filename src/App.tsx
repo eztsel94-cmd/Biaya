@@ -429,7 +429,7 @@ export default function App() {
       />
 
       {/* Main App Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-24 md:pb-12">
         {/* Warning jika aturan Firestore belum diset (Missing Permissions) */}
         {permissionError && (
           <div className="mb-5 p-4 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs sm:text-sm flex items-start gap-3 shadow-lg">
@@ -455,21 +455,23 @@ service cloud.firestore {
         )}
 
         {/* Real-time Firestore Cloud status alert bar */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-md">
-          <div className="flex items-center gap-2.5">
+        <div className="mb-4 sm:mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-md">
+          <div className="flex items-center gap-2">
             <span
-              className={`w-2.5 h-2.5 rounded-full ${
+              className={`w-2.5 h-2.5 shrink-0 rounded-full ${
                 isRealtimeConnected && !permissionError
                   ? 'bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse'
                   : 'bg-amber-400'
               }`}
             />
-            <span className="text-slate-300">
-              <strong className="text-white">Cloud Database Real-Time (Firebase Firestore):</strong>{' '}
-              Semua modul (Dashboard, Armada, Biaya Unit, Catatan Harian) tersambung langsung ke Firestore (<strong>traksi-22f5b</strong>) via <code className="text-emerald-400 font-mono bg-emerald-950/60 px-1 py-0.5 rounded">onSnapshot</code> tanpa localStorage!
+            <span className="text-slate-300 text-[11px] sm:text-xs">
+              <strong className="text-white">Firestore Real-Time:</strong>{' '}
+              <span className="hidden sm:inline">Semua modul tersambung ke project </span>
+              <strong className="text-emerald-400 font-mono">traksi-22f5b</strong>
+              <span className="hidden sm:inline"> via <code className="text-emerald-400 font-mono bg-emerald-950/60 px-1 py-0.5 rounded">onSnapshot</code></span>
             </span>
           </div>
-          <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
+          <div className="flex items-center justify-between sm:justify-end gap-2 text-slate-400 font-mono text-[11px] pt-1.5 sm:pt-0 border-t border-slate-800/80 sm:border-0">
             <button
               onClick={() => setIsUserModalOpen(true)}
               className="hover:text-emerald-400 transition flex items-center gap-1.5"
@@ -531,7 +533,7 @@ service cloud.firestore {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-6 mt-12 text-center text-xs text-slate-400">
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-6 mt-12 mb-16 md:mb-0 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold text-white">Harbor Homes</span>

@@ -538,65 +538,65 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuat
       </div>
 
       {/* Kartu Ringkasan Total (Summary Cards) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {/* Total Tonase */}
-        <div className="bg-gradient-to-br from-emerald-950/50 via-slate-900 to-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden group">
+        <div className="bg-gradient-to-br from-emerald-950/50 via-slate-900 to-slate-900/90 border border-emerald-500/30 rounded-2xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Total Tonase</span>
-            <Scale className="w-4 h-4 text-emerald-400" />
+          <div className="flex items-center justify-between text-slate-400 mb-1.5 sm:mb-2">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-emerald-400">Total Tonase</span>
+            <Scale className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
             {totalTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            <span className="text-xs sm:text-sm font-semibold text-emerald-400 ml-1.5">Ton</span>
+            <span className="text-xs sm:text-sm font-semibold text-emerald-400 ml-1">Ton</span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
-            TBS terangkut ({filteredRecords.length} catatan)
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-1 truncate">
+            TBS ({filteredRecords.length} catatan)
           </p>
         </div>
 
         {/* Total Pengiriman / Rit */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">Total Pengiriman</span>
-            <Truck className="w-4 h-4 text-sky-400" />
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between text-slate-400 mb-1.5 sm:mb-2">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-sky-400">Total Pengiriman</span>
+            <Truck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
             {totalTrips}
-            <span className="text-xs sm:text-sm font-semibold text-sky-400 ml-1.5">Rit</span>
+            <span className="text-xs sm:text-sm font-semibold text-sky-400 ml-1">Rit</span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
-            Frekuensi angkut ke pabrik
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-1 truncate">
+            Trip angkut pabrik
           </p>
         </div>
 
         {/* Rata-Rata Tonase per Rit */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Rata-Rata Muatan</span>
-            <TrendingUp className="w-4 h-4 text-amber-400" />
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between text-slate-400 mb-1.5 sm:mb-2">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-amber-400">Rata-Rata Muatan</span>
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
             {avgTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            <span className="text-xs sm:text-sm font-semibold text-amber-400 ml-1.5">Ton/Rit</span>
+            <span className="text-xs sm:text-sm font-semibold text-amber-400 ml-1">T/Rit</span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
-            Efisiensi kapasitas muat
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-1 truncate">
+            Rerata per ritase
           </p>
         </div>
 
         {/* Armada Aktif */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-purple-400">Unit Beroperasi</span>
-            <Layers className="w-4 h-4 text-purple-400" />
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 sm:p-5 shadow-lg relative overflow-hidden">
+          <div className="flex items-center justify-between text-slate-400 mb-1.5 sm:mb-2">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-purple-400">Unit Beroperasi</span>
+            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+          <div className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
             {uniqueTrucksCount}
-            <span className="text-xs sm:text-sm font-semibold text-purple-400 ml-1.5">Unit Truk</span>
+            <span className="text-xs sm:text-sm font-semibold text-purple-400 ml-1">Unit</span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
-            DT tercatat di periode ini
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-1 truncate">
+            DT di periode ini
           </p>
         </div>
       </div>
@@ -929,106 +929,186 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ onOpenPemuat
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto -mx-5 sm:mx-0">
-                <table className="w-full text-left text-xs sm:text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
-                      <th className="py-3 px-3 sm:px-4 font-semibold">Tgl</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold">Unit Truk</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold">Pemuat</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold">Afdeling</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold text-right">Tonase</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold hidden md:table-cell">Catatan</th>
-                      <th className="py-3 px-3 sm:px-4 font-semibold text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {filteredRecords.map((r) => (
-                      <tr
-                        key={r.id}
-                        className="hover:bg-slate-800/40 transition group"
-                      >
-                        {/* Tanggal */}
-                        <td className="py-3 px-3 sm:px-4 whitespace-nowrap text-slate-300 font-medium text-xs">
-                          {formatDateIndo(r.date)}
-                        </td>
-
-                        {/* Unit Truk */}
-                        <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+              <div className="space-y-4">
+                {/* Mobile View: High-density touch-friendly cards (md:hidden) */}
+                <div className="md:hidden space-y-3">
+                  {filteredRecords.map((r) => (
+                    <div
+                      key={r.id}
+                      className="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition shadow-sm space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-bold text-xs">
-                            <Truck className="w-3 h-3" />
+                            <Truck className="w-3.5 h-3.5" />
                             {r.truckNumber}
                           </span>
-                        </td>
-
-                        {/* Pemuat */}
-                        <td className="py-3 px-3 sm:px-4 font-medium text-white whitespace-nowrap">
-                          {r.driverName}
-                        </td>
-
-                        {/* Afdeling */}
-                        <td className="py-3 px-3 sm:px-4 text-slate-300 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1 text-xs">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                             <MapPin className="w-3 h-3 text-slate-500" />
                             {r.afdeling}
                           </span>
-                        </td>
-
-                        {/* Tonase */}
-                        <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap">
-                          <span className="font-mono font-black text-emerald-400 text-sm">
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-emerald-400 text-base">
                             {Number(r.tonnage).toLocaleString('id-ID', {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
                           </span>
-                          <span className="text-[11px] text-slate-400 ml-1">Ton</span>
-                        </td>
+                          <span className="text-[11px] text-slate-400 ml-1 font-semibold">Ton</span>
+                        </div>
+                      </div>
 
-                        {/* Catatan */}
-                        <td className="py-3 px-3 sm:px-4 text-slate-400 text-xs hidden md:table-cell max-w-xs truncate">
-                          {r.notes || '-'}
-                        </td>
+                      <div className="flex items-center justify-between text-xs text-slate-300 pt-2 border-t border-slate-900">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-white">{r.driverName}</span>
+                          <span className="text-slate-600">•</span>
+                          <span className="text-slate-400 text-[11px]">{formatDateIndo(r.date)}</span>
+                        </div>
 
-                        {/* Aksi: Edit & Hapus */}
-                        <td className="py-3 px-3 sm:px-4 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleOpenEditModal(r)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition cursor-pointer"
-                              title="Edit data ini di Firestore"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setRecordToDelete(r)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
-                              title="Hapus data ini dari Firestore"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditModal(r)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition cursor-pointer"
+                            title="Edit data ini di Firestore"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setRecordToDelete(r)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                            title="Hapus data ini dari Firestore"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {r.notes && (
+                        <p className="text-[11px] text-slate-400 bg-slate-900/70 p-2 rounded-lg font-mono">
+                          {r.notes}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Ringkasan Mobile */}
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                      Total ({filteredRecords.length} Rit)
+                    </span>
+                    <span className="font-mono font-black text-emerald-400 text-base">
+                      {totalTonnage.toLocaleString('id-ID', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      <span className="text-xs">Ton</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Desktop View: Full Data Table (hidden on mobile, block on md+) */}
+                <div className="hidden md:block overflow-x-auto -mx-5 sm:mx-0">
+                  <table className="w-full text-left text-xs sm:text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
+                        <th className="py-3 px-3 sm:px-4 font-semibold">Tgl</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold">Unit Truk</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold">Pemuat</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold">Afdeling</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold text-right">Tonase</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold hidden md:table-cell">Catatan</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold text-center">Aksi</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  {/* Footer Ringkasan Baris */}
-                  <tfoot>
-                    <tr className="border-t-2 border-slate-700 bg-slate-800/40 text-xs font-bold text-slate-300">
-                      <td colSpan={4} className="py-3 px-4 text-right uppercase tracking-wider text-slate-400">
-                        Total Muatan ({filteredRecords.length} Rit):
-                      </td>
-                      <td className="py-3 px-4 text-right text-emerald-400 font-mono text-sm font-black">
-                        {totalTonnage.toLocaleString('id-ID', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}{' '}
-                        <span className="text-xs">Ton</span>
-                      </td>
-                      <td colSpan={2} className="py-3 px-4"></td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {filteredRecords.map((r) => (
+                        <tr
+                          key={r.id}
+                          className="hover:bg-slate-800/40 transition group"
+                        >
+                          {/* Tanggal */}
+                          <td className="py-3 px-3 sm:px-4 whitespace-nowrap text-slate-300 font-medium text-xs">
+                            {formatDateIndo(r.date)}
+                          </td>
+
+                          {/* Unit Truk */}
+                          <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-bold text-xs">
+                              <Truck className="w-3 h-3" />
+                              {r.truckNumber}
+                            </span>
+                          </td>
+
+                          {/* Pemuat */}
+                          <td className="py-3 px-3 sm:px-4 font-medium text-white whitespace-nowrap">
+                            {r.driverName}
+                          </td>
+
+                          {/* Afdeling */}
+                          <td className="py-3 px-3 sm:px-4 text-slate-300 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 text-xs">
+                              <MapPin className="w-3 h-3 text-slate-500" />
+                              {r.afdeling}
+                            </span>
+                          </td>
+
+                          {/* Tonase */}
+                          <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap">
+                            <span className="font-mono font-black text-emerald-400 text-sm">
+                              {Number(r.tonnage).toLocaleString('id-ID', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                            <span className="text-[11px] text-slate-400 ml-1">Ton</span>
+                          </td>
+
+                          {/* Catatan */}
+                          <td className="py-3 px-3 sm:px-4 text-slate-400 text-xs hidden md:table-cell max-w-xs truncate">
+                            {r.notes || '-'}
+                          </td>
+
+                          {/* Aksi: Edit & Hapus */}
+                          <td className="py-3 px-3 sm:px-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenEditModal(r)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition cursor-pointer"
+                                title="Edit data ini di Firestore"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setRecordToDelete(r)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                                title="Hapus data ini dari Firestore"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {/* Footer Ringkasan Baris */}
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-700 bg-slate-800/40 text-xs font-bold text-slate-300">
+                        <td colSpan={4} className="py-3 px-4 text-right uppercase tracking-wider text-slate-400">
+                          Total Muatan ({filteredRecords.length} Rit):
+                        </td>
+                        <td className="py-3 px-4 text-right text-emerald-400 font-mono text-sm font-black">
+                          {totalTonnage.toLocaleString('id-ID', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{' '}
+                          <span className="text-xs">Ton</span>
+                        </td>
+                        <td colSpan={2} className="py-3 px-4"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             )}
           </div>
