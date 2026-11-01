@@ -753,7 +753,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   rows={6}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder={`Tempel tulisan atau catatan biaya apapun di sini. Contoh:\n\nDT 90\n- Bio solar 100 liter 850.000 SPBU Pasir\n- Kampas rem depan bendix 450rb\n- Ongkos montir bengkel las 200rb\n- Tunjangan BPJS supir 175.000\n- Tunjangan Jamsostek supir 150rb\n- Potongan mangkir 1 hari 125.000\n- Upah supir ritase afdeling 2 450.000\n- Ganti oli mesin meditran 550rb\n\nDT 01:\nIsi biosolar 700.000\nGanti ban luar bridgestone 1.950.000`}
+                  placeholder={`Tempel tulisan atau catatan biaya di sini. Contoh:\n\n* DT90\n  * Fuel: 17,445,413\n  * Lubricants: 397,387\n  * Sparepart: 1,668,882\n  * Tyre & Tubes: 243,000\n  * Workshop: 1,889,553\n\nDT 38\n- BPJS: 175,000\n- Jamsostek: 150,000\n- Beras: 250,000\n- Supir: 450,000`}
                   className="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3.5 font-mono text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition resize-y leading-relaxed"
                 />
               </div>
@@ -762,7 +762,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <Info className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Format kode DT yang didukung: <strong>DT 90</strong>, <strong>DT90</strong>, <strong>dt 90</strong>, <strong>dt-90</strong>, dll.
+                    Format kode agar terbaca & masuk biaya hanya: <strong>DT 90</strong> atau <strong>DT90</strong> (selain itu tidak masuk).
                   </span>
                 </div>
 

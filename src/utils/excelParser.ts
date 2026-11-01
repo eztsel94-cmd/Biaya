@@ -219,14 +219,13 @@ export function detectCategory(text: string): ExpenseCategory {
 
 /**
  * Strict DT code extractor:
- * Hanya melihat kode DT dan nomor unitnya saja, contoh: (DT 90), DT 90, dt 90, DT90, dt90, DT-90.
- * Tidak ada penambahan kata kunci lain (tidak mencocokkan plat nomor, nama supir, atau istilah lain).
- * Jika berbeda dari contoh di atas, return null agar otomatis disisihkan ke sampah/pilah manual.
+ * Hanya membaca kode DT sesuai contoh: DT 90 atau DT90 (termasuk dalam kurung (DT 90) / (DT90) atau bullet * DT90).
+ * Selain format tersebut (misal CP05, Unit 90, dll.) return null agar tidak masuk.
  */
 export function extractRawUnitCode(text: string): string | null {
   if (!text) return null;
-  // Strictly matches patterns like: (DT 90), [DT 90], DT 90, DT90, dt 90, dt90, DT-90, dt-90
-  const match = text.match(/(?:^|[\s(\[#_:\/-])dt[\s._-]*([0-9]{1,4})(?:$|[\s)\]:;,\/-])/i);
+  // Strictly matches only DT 90 or DT90 (optionally preceded by space, paren, bracket, bullet *)
+  const match = text.match(/(?:^|[\s(\[*•\-])dt([ ]?[0-9]{1,4})(?:$|[\s)\]:;,.])/i);
   if (match) {
     const rawDigits = match[1].trim();
     const numVal = parseInt(rawDigits, 10);
@@ -417,66 +416,102 @@ export function parseFreeformNotes(
 
   let activeTruck: TruckUnit | null = null;
   let activeRawUnitCode: string | null = null;
+  let activeNonDtCode: string | null = null;
   const todayStr = new Date().toISOString().split('T')[0];
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
+    const cleanBulletLine = line.replace(/^[\s*\-•>#]+/, '').trim();
 
-    // Cek apakah baris merupakan header unit (contoh: "DT 90", "DT90:", "[dt 90]", "Unit 90", "=== DT 01 ===")
+    // 1. Lewati baris rekap jumlah / total (contoh: "* Total Biaya: 27,448,205", "Total:", "Sub Total:")
+    // agar angka total tidak ikut tercatat ganda sebagai item pengeluaran
+    if (
+      /^(?:total\s*biaya|total\s*pengeluaran|sub\s*total|subtotal|grand\s*total|jumlah\s*biaya|total)\b/i.test(
+        cleanBulletLine
+      )
+    ) {
+      continue;
+    }
+
+    // 2. Lewati baris kategori yang bernilai kosong / strip (contoh: "* GRN: -", "* Lain-Lain: -", "* BPJS: 0")
+    // tanpa mengubah konteks unit DT aktif saat ini
+    if (/:\s*(?:[-–—]+|rp\.?\s*0|0|nihil|kosong)\s*$/i.test(cleanBulletLine)) {
+      continue;
+    }
+
+    // Cek apakah baris mengandung kode DT (DT 90 atau DT90)
     const lineMatchedTruck = matchTruck(line, trucks);
     const rawUnitFound = extractRawUnitCode(line);
 
     // Cek apakah baris mengandung nominal biaya
     const amountInLine = extractAmountFromText(line);
 
-    // Jika baris adalah murni header unit tanpa biaya:
-    const isPureHeader =
-      Boolean(lineMatchedTruck || rawUnitFound) &&
-      amountInLine <= 0 &&
-      line.length < 60;
-
-    if (isPureHeader) {
+    // 3. Jika baris tidak memiliki nominal biaya (murni baris header unit / judul seksi):
+    if (amountInLine <= 0) {
       if (lineMatchedTruck) {
         activeTruck = lineMatchedTruck;
         activeRawUnitCode = null;
+        activeNonDtCode = null;
         detectedUnitsSet.add(lineMatchedTruck.code);
       } else if (rawUnitFound) {
         activeTruck = null;
         activeRawUnitCode = rawUnitFound;
+        activeNonDtCode = null;
         unmatchedUnitsSet.add(rawUnitFound);
+      } else if (cleanBulletLine.length > 0 && cleanBulletLine.length < 50) {
+        // Header unit yang BUKAN format DT 90 / DT90 (contoh: "* CP05", "EX01", "Unit 1")
+        // Reset activeTruck agar biaya di bawahnya TIDAK masuk ke unit DT sebelumnya!
+        activeTruck = null;
+        activeRawUnitCode = null;
+        activeNonDtCode = cleanBulletLine.replace(/[:\-]+$/, '').trim();
       }
       continue;
     }
 
     const amount = amountInLine;
-    if (amount <= 0) {
-      // Baris bukan catatan biaya (misal judul, sapaan, catatan non-angka), lewati
-      continue;
-    }
+
+    // Cek apakah baris berbiaya ini menyebutkan kode non-DT secara eksplisit di awal baris (misal "CP05 Fuel: 500,000")
+    const nonDtInlineMatch = cleanBulletLine.match(/^([a-z]{2,4}[ ]?[0-9]{1,4})\b/i);
+    const inlineNonDtCode =
+      nonDtInlineMatch && !/^dt/i.test(nonDtInlineMatch[1])
+        ? nonDtInlineMatch[1].toUpperCase()
+        : null;
 
     // Tentukan truk untuk baris biaya ini:
     let lineTruck: TruckUnit | null = null;
     let lineRawCode: string | null = null;
+    let lineNonDtCode: string | null = null;
 
     if (lineMatchedTruck) {
-      // Baris ini secara eksplisit menyebutkan kode DT valid yang cocok dengan unit di database
+      // Baris ini secara eksplisit menyebutkan kode DT valid (DT 90 / DT90) yang cocok dengan unit di database
       lineTruck = lineMatchedTruck;
-      activeTruck = lineMatchedTruck; // perbarui konteks untuk baris-baris berikutnya
+      activeTruck = lineMatchedTruck;
       activeRawUnitCode = null;
+      activeNonDtCode = null;
       detectedUnitsSet.add(lineMatchedTruck.code);
     } else if (rawUnitFound) {
-      // Menulis kode DT lengkap tetapi unit tidak ditemukan/tidak cocok di database
+      // Menulis kode DT valid (DT 90 / DT90) tetapi nomor unit tersebut belum terdaftar di Armada
       lineRawCode = rawUnitFound;
       activeTruck = null;
       activeRawUnitCode = rawUnitFound;
+      activeNonDtCode = null;
       unmatchedUnitsSet.add(rawUnitFound);
+    } else if (inlineNonDtCode) {
+      // Menulis kode non-DT (misal CP05) pada baris yang sama
+      lineNonDtCode = inlineNonDtCode;
+      activeTruck = null;
+      activeRawUnitCode = null;
+      activeNonDtCode = inlineNonDtCode;
     } else if (activeTruck) {
       // Mengikuti header DT aktif sebelumnya (yang cocok)
       lineTruck = activeTruck;
     } else if (activeRawUnitCode) {
-      // Mengikuti header DT aktif sebelumnya (yang tidak cocok dengan unit database)
+      // Mengikuti header DT aktif sebelumnya (yang belum terdaftar di Armada)
       lineRawCode = activeRawUnitCode;
       unmatchedUnitsSet.add(activeRawUnitCode);
+    } else if (activeNonDtCode) {
+      // Berada di bawah header non-DT (contoh: * CP05) -> tidak boleh masuk ke biaya DT!
+      lineNonDtCode = activeNonDtCode;
     }
 
     const category = detectCategory(line);
@@ -488,8 +523,28 @@ export function parseFreeformNotes(
 
     // LOGIKA PEMILAHAN:
     // KONDISI 1: TOMBOL DT DEFAULT AKTIF (ON)
-    // Sesuai instruksi: "Kalo tombol dt default on maka tetap masukin semua biaya ke dt terpilih ...tanpa melihat kode"
     if (useDefaultTruck && defaultTruck) {
+      // Jika baris berada di bawah kode non-DT (misal CP05), tetap jangan masukkan kecuali memang tanpa kode atau DT
+      if (lineNonDtCode) {
+        manualItems.push({
+          id: `manual-nondt-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          rawIndex: idx,
+          rawText: line,
+          date,
+          truckId: '',
+          truckCode: `${lineNonDtCode} (Bukan DT)`,
+          category,
+          description: cleanDesc,
+          amount,
+          vendor,
+          invoiceNumber,
+          isValid: false,
+          needsManualReview: true,
+          manualReason: `Kode "${lineNonDtCode}" bukan format DT 90 / DT90 sehingga tidak dimasukkan.`,
+        });
+        continue;
+      }
+
       detectedUnitsSet.add(defaultTruck.code);
       items.push({
         id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -510,10 +565,7 @@ export function parseFreeformNotes(
     }
 
     // KONDISI 2: TOMBOL DT DEFAULT NON-AKTIF (OFF)
-    // Mengandalkan kode DT secara murni:
-    // 2a. Kode cocok dengan unit di database -> Format Valid / Otomatis Cocok
-    // 2b. Kode lengkap tapi tidak ada persamaan di database -> Data Tidak Cocok (bisa diedit manual)
-    // 2c. Tanpa kode DT -> Data Tidak Cocok / Perlu Pilah Manual
+    // Hanya kode DT 90 atau DT90 yang cocok dengan Armada yang masuk ke items!
     if (lineTruck) {
       items.push({
         id: `freeform-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -531,8 +583,7 @@ export function parseFreeformNotes(
         needsManualReview: false,
       });
     } else if (lineRawCode) {
-      // KODE DT LENGKAP TAPI TIDAK COCOK DENGAN UNIT YANG TERSEDIA
-      // Tidak boleh dimasukkan sembarangan ke unit lain, masuk ke Data Tidak Cocok
+      // Format DT valid (contoh DT 91 / DT91) tetapi unit belum didaftarkan di menu Armada
       manualItems.push({
         id: `manual-mismatch-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         rawIndex: idx,
@@ -548,17 +599,18 @@ export function parseFreeformNotes(
         invoiceNumber,
         isValid: false,
         needsManualReview: true,
-        manualReason: `Kode unit "${lineRawCode}" ditemukan, namun tidak ada unit yang cocok di daftar armada. Otomatis masuk ke sampah / pilah manual agar bisa diedit kembali.`,
+        manualReason: `Kode unit "${lineRawCode}" terdeteksi, namun belum terdaftar di daftar Armada. Klik "+ Daftarkan ${lineRawCode}" di atas jika ingin memasukkannya.`,
       });
     } else {
-      // BARIS DENGAN FORMAT BERBEDA DARI CONTOH (DT 90) ATAU TANPA KODE DT
+      // Format bukan DT 90 / DT90 (misal CP05 atau tanpa kode DT) -> tidak masuk!
+      const labelCode = lineNonDtCode ? `${lineNonDtCode} (Bukan DT)` : 'Tanpa Kode DT';
       manualItems.push({
         id: `manual-nocode-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         rawIndex: idx,
         rawText: line,
         date,
         truckId: '',
-        truckCode: 'Tanpa Kode DT',
+        truckCode: labelCode,
         category,
         description: cleanDesc,
         amount,
@@ -566,7 +618,9 @@ export function parseFreeformNotes(
         invoiceNumber,
         isValid: false,
         needsManualReview: true,
-        manualReason: 'Format berbeda dengan contoh (DT 90). Otomatis dibuang ke sampah / pilah manual agar bisa diedit kembali.',
+        manualReason: lineNonDtCode
+          ? `Kode "${lineNonDtCode}" bukan format DT 90 atau DT90 sehingga otomatis tidak dimasukkan.`
+          : 'Tidak menggunakan kode DT 90 atau DT90 sehingga otomatis tidak dimasukkan.',
       });
     }
   }
@@ -581,39 +635,47 @@ export function parseFreeformNotes(
 
 /**
  * Extract amount number from natural text line
+ * Supports both dot (17.445.413) and comma (17,445,413) thousand separators
  */
 function extractAmountFromText(line: string): number {
+  if (!line) return 0;
+
+  // Hilangkan kode unit seperti DT 90 / DT90 / CP05 agar nomor unit tidak terbaca sebagai nominal
+  const lineWithoutUnit = line
+    .replace(/(?:^|[\s(\[*•\-])[a-z]{2,4}[ ]?[0-9]{1,4}(?:$|[\s)\]:;,.])/gi, ' ')
+    .trim();
+
   // 1. Million multiplier: 1.5jt, 1,5 juta
-  const jtMatch = line.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:jt|juta)\b/i);
+  const jtMatch = lineWithoutUnit.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:jt|juta)\b/i);
   if (jtMatch) {
     const n = parseFloat(jtMatch[1].replace(',', '.'));
     if (!isNaN(n) && n > 0) return Math.round(n * 1000000);
   }
 
   // 2. Thousand multiplier: 450rb, 150k, 500 ribu
-  const rbMatch = line.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:rb|k|ribu)\b/i);
+  const rbMatch = lineWithoutUnit.match(/([0-9]+(?:[.,][0-9]+)?)\s*(?:rb|k|ribu)\b/i);
   if (rbMatch) {
     const n = parseFloat(rbMatch[1].replace(',', '.'));
     if (!isNaN(n) && n > 0) return Math.round(n * 1000);
   }
 
-  // 3. Currency prefix: Rp 850.000 or IDR 850,000
-  const rpMatch = line.match(/(?:rp\.?|idr)\s*([0-9.,]+)/i);
+  // 3. Currency prefix: Rp 850.000 or Rp 17,445,413 or IDR 850,000
+  const rpMatch = lineWithoutUnit.match(/(?:rp\.?|idr)\s*([0-9.,]+)/i);
   if (rpMatch) {
     const n = parseAmount(rpMatch[1]);
     if (n > 0) return n;
   }
 
-  // 4. Standard Indonesian formatted thousand: 850.000 or 1.250.000
-  const dotPattern = /\b([0-9]{1,3}(?:\.[0-9]{3})+)\b/;
-  const dotMatch = line.match(dotPattern);
-  if (dotMatch) {
-    const n = parseAmount(dotMatch[1]);
+  // 4. Formatted thousand with dot OR comma: 850.000, 1.250.000, 17,445,413, 397,387, 243,000
+  const sepPattern = /\b([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?)\b/;
+  const sepMatch = lineWithoutUnit.match(sepPattern);
+  if (sepMatch) {
+    const n = parseAmount(sepMatch[1]);
     if (n > 0) return n;
   }
 
   // 5. Bare digits >= 1000 (e.g. 500000, 850000)
-  const bareMatch = line.match(/\b([0-9]{4,9})\b/);
+  const bareMatch = lineWithoutUnit.match(/\b([0-9]{4,12})\b/);
   if (bareMatch) {
     const n = parseInt(bareMatch[1], 10);
     if (!isNaN(n) && n >= 1000) return n;
@@ -647,14 +709,16 @@ function cleanExpenseDescription(line: string, category: ExpenseCategory): strin
     // Remove bullets and numbers at start
     .replace(/^[\s*\-•>#]+/, '')
     .replace(/^[0-9]+[.)]\s*/, '')
-    // Remove explicit unit prefixes like "(DT 90)", "DT 90:", "dt 90 -", "[DT 90]"
-    .replace(/(?:\(?\s*dt\s*\)?)[\s._-]*[0-9]{1,4}[:\s\-]*/i, '')
-    // Remove amount patterns
+    // Remove explicit unit prefixes like "(DT 90)", "DT 90:", "DT90 -"
+    .replace(/(?:\(?\s*dt[ ]?[0-9]{1,4}\s*\)?)[:\s\-]*/i, '')
+    // Remove amount patterns (Rp, jt/rb, dot or comma thousands, bare digits)
     .replace(/(?:rp\.?|idr)\s*[0-9.,]+(?:\s*(?:jt|juta|rb|k|ribu))?/gi, '')
     .replace(/[0-9]+(?:[.,][0-9]+)?\s*(?:jt|juta|rb|k|ribu)\b/gi, '')
-    .replace(/\b[0-9]{1,3}(?:\.[0-9]{3})+\b/g, '')
+    .replace(/\b[0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?\b/g, '')
+    .replace(/\b[0-9]{4,12}\b/g, '')
     // Clean multiple spaces and dashes
     .replace(/[:\-–—\s]+$/, '')
+    .replace(/^[:\-–—\s]+/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
