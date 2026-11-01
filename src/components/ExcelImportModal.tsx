@@ -69,6 +69,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [selectedDefaultTruckId, setSelectedDefaultTruckId] = useState<string>(
     defaultTruckId || trucks[0]?.id || ''
   );
+  // Kondisi Filter Kode Ketat: Hanya (DT 90 atau DT90), selain itu tidak masuk
+  const [autoHideNonDt, setAutoHideNonDt] = useState<boolean>(true);
+  const [rejectedNonDtCount, setRejectedNonDtCount] = useState<number>(0);
 
   // Parsed items & breakdown state
   const [parsedItems, setParsedItems] = useState<ParsedExpenseItem[]>([]);
@@ -84,24 +87,44 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle parse from text (supports freeform text and excel tables)
-  const handleParseText = () => {
+  const runTextParse = (
+    textToParse: string,
+    overrideUseDefault?: boolean,
+    overrideDefaultId?: string,
+    overrideHideNonDt?: boolean
+  ) => {
     setErrorMessage(null);
     setSuccessCount(null);
-    if (!inputText.trim()) {
+    if (!textToParse.trim()) {
       setErrorMessage('Silakan tempel (paste) catatan atau tulisan biaya terlebih dahulu.');
       return;
     }
 
+    const effectiveUseDefault =
+      overrideUseDefault !== undefined ? overrideUseDefault : useDefaultTruck;
+    const effectiveDefaultId =
+      overrideDefaultId !== undefined
+        ? overrideDefaultId
+        : selectedDefaultTruckId || trucks[0]?.id || '';
+    const effectiveHideNonDt =
+      overrideHideNonDt !== undefined ? overrideHideNonDt : autoHideNonDt;
+
     try {
       setIsProcessing(true);
       const parseOptions = {
-        useDefaultTruck,
-        defaultTruckId: selectedDefaultTruckId,
+        useDefaultTruck: effectiveUseDefault,
+        defaultTruckId: effectiveDefaultId,
       };
 
-      if (inputText.includes('\t') || (inputText.includes(';') && !inputText.includes(','))) {
-        const { items, manualItems: mItems } = parsePastedExcelText(inputText, trucks, parseOptions);
+      if (textToParse.includes('\t') || (textToParse.includes(';') && !textToParse.includes(','))) {
+        const { items, manualItems: mItems } = parsePastedExcelText(textToParse, trucks, parseOptions);
+        const nonDtRejected = mItems.filter((m) => !m.unrecognizedUnitCode);
+        const filteredManual = effectiveHideNonDt
+          ? mItems.filter((m) => Boolean(m.unrecognizedUnitCode))
+          : mItems;
+
+        setRejectedNonDtCount(nonDtRejected.length);
+
         if (items.length === 0 && mItems.length === 0) {
           setErrorMessage('Tidak ada baris data biaya yang dapat dideteksi dari teks tabel yang ditempel.');
           setParsedItems([]);
@@ -109,29 +132,40 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           return;
         }
         setParsedItems(items);
-        setManualItems(mItems);
+        setManualItems(filteredManual);
         setDetectedUnits(Array.from(new Set(items.map((i) => i.truckCode))));
-        setUnmatchedUnits([]);
-        if (items.length === 0 && mItems.length > 0) {
+        setUnmatchedUnits(
+          Array.from(
+            new Set(mItems.map((m) => m.unrecognizedUnitCode).filter(Boolean) as string[])
+          )
+        );
+        if (items.length === 0 && filteredManual.length > 0) {
           setActiveResultTab('manual');
         } else {
           setActiveResultTab('valid');
         }
       } else {
-        const result = parseFreeformNotes(inputText, trucks, parseOptions);
+        const result = parseFreeformNotes(textToParse, trucks, parseOptions);
+        const nonDtRejected = result.manualItems.filter((m) => !m.unrecognizedUnitCode);
+        const filteredManual = effectiveHideNonDt
+          ? result.manualItems.filter((m) => Boolean(m.unrecognizedUnitCode))
+          : result.manualItems;
+
+        setRejectedNonDtCount(nonDtRejected.length);
+
         if (result.items.length === 0 && result.manualItems.length === 0) {
           setErrorMessage(
-            'Tidak ada data biaya yang terdeteksi. Pastikan mencantumkan rincian dan nominal biaya (contoh: "Solar 850.000").'
+            'Tidak ada data biaya yang terdeteksi. Pastikan mencantumkan kode (DT 90 atau DT90) serta nominal biaya.'
           );
           setParsedItems([]);
           setManualItems([]);
           return;
         }
         setParsedItems(result.items);
-        setManualItems(result.manualItems);
+        setManualItems(filteredManual);
         setDetectedUnits(result.detectedUnits);
         setUnmatchedUnits(result.unmatchedUnits);
-        if (result.items.length === 0 && result.manualItems.length > 0) {
+        if (result.items.length === 0 && filteredManual.length > 0) {
           setActiveResultTab('manual');
         } else {
           setActiveResultTab('valid');
@@ -142,6 +176,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Handle parse from text (supports freeform text and excel tables)
+  const handleParseText = () => {
+    runTextParse(inputText);
   };
 
 
@@ -245,16 +284,17 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     setManualItems((prev) => prev.filter((_, idx) => idx !== manualIndex));
   };
 
-  // Helper to auto-create an unrecognized unit if user pasted e.g. DT 99 or DT 88
+  // Helper to auto-create an unrecognized unit if user pasted e.g. DT 90, GD 01, EX 46, MB 13
   const handleRegisterNewUnit = async (unitCode: string) => {
     if (!onAddTruck) return;
     try {
+      const cleanPrefix = (unitCode.match(/^[a-zA-Z]+/) || ['DT'])[0].toUpperCase();
       const cleanNum = unitCode.replace(/[^0-9]/g, '') || '99';
       const created = await onAddTruck({
         code: unitCode.toUpperCase(),
-        plateNumber: `BM ${cleanNum.padEnd(4, '0')} TBS`,
-        driverName: `Supir ${unitCode}`,
-        model: 'Dump Truck TBS 130 HD',
+        plateNumber: `BM ${cleanNum.padEnd(4, '0')} ${cleanPrefix}`,
+        driverName: `Operator ${unitCode}`,
+        model: `Unit Operasional ${cleanPrefix}`,
         capacity: '8.5 Ton TBS',
         status: 'Aktif',
         year: 2023,
@@ -361,6 +401,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const handleClearAll = () => {
     setInputText('');
     setParsedItems([]);
+    setManualItems([]);
+    setUnmatchedUnits([]);
+    setRejectedNonDtCount(0);
     setErrorMessage(null);
     setSuccessCount(null);
   };
@@ -650,20 +693,75 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             </div>
           </div>
 
-          {/* CARD PENGATURAN UNIT DEFAULT & TOMBOL PENGALIH (TOGGLE SWITCH) */}
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 sm:p-4 space-y-3 shadow-md">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {/* Tombol Pengalih (Toggle Switch) */}
+          {/* FITUR KONDISI FILTER KODE KETAT (DT, EX, MB, GD + NOMOR UNIT) & UNIT DEFAULT */}
+          <div className="bg-slate-950/90 border border-emerald-500/30 rounded-xl p-3.5 sm:p-4 space-y-3.5 shadow-md">
+            {/* KONDISI 1: ATURAN KODE WAJIB (DT, EX, MB, GD) */}
+            <div className="p-3 rounded-xl bg-emerald-950/25 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs sm:text-sm font-bold text-white">
+                      Kondisi Kode Unit: DT, EX, MB, GD (Cocok Huruf & Nomor)
+                    </span>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      KONDISI AKTIF
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    Kode yang terbaca dan masuk biayanya: <strong className="text-emerald-300 font-mono">DT 90 / DT90</strong>, <strong className="text-emerald-300 font-mono">GD 01 / GD01</strong>, <strong className="text-emerald-300 font-mono">EX 46 / EX46</strong>, <strong className="text-emerald-300 font-mono">MB 13 / MB13</strong>. Sistem mencocokkan <strong>huruf depan sekaligus nomornya</strong> (contoh: <code className="text-amber-300 font-mono">MB 90</code> hanya masuk ke <code className="text-amber-300 font-mono">MB 90</code> dan tidak akan dobel ke <code className="text-amber-300 font-mono">DT 90</code>).
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Buang Otomatis Kode Selain DT / EX / MB / GD */}
+              <div className="flex items-center gap-2.5 bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-800 shrink-0">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoHideNonDt}
+                  onClick={() => {
+                    const nextVal = !autoHideNonDt;
+                    setAutoHideNonDt(nextVal);
+                    if (inputText.trim() && (parsedItems.length > 0 || manualItems.length > 0 || rejectedNonDtCount > 0)) {
+                      runTextParse(inputText, useDefaultTruck, selectedDefaultTruckId, nextVal);
+                    }
+                  }}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autoHideNonDt ? 'bg-emerald-500' : 'bg-slate-700'
+                  }`}
+                  title="Otomatis buang/abaikan baris yang kodenya bukan DT, EX, MB, atau GD"
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-slate-950 shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      autoHideNonDt ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+                <span className="text-[11px] font-semibold text-slate-200">
+                  {autoHideNonDt ? 'Buang Otomatis Selain DT/EX/MB/GD' : 'Tampilkan di Tab Tidak Masuk'}
+                </span>
+              </div>
+            </div>
+
+            {/* KONDISI 2: TOMBOL PENGALIH (TOGGLE SWITCH) DT DEFAULT */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   role="switch"
                   aria-checked={useDefaultTruck}
-                  onClick={() => setUseDefaultTruck(!useDefaultTruck)}
+                  onClick={() => {
+                    const nextVal = !useDefaultTruck;
+                    setUseDefaultTruck(nextVal);
+                    if (inputText.trim() && (parsedItems.length > 0 || manualItems.length > 0 || rejectedNonDtCount > 0)) {
+                      runTextParse(inputText, nextVal, selectedDefaultTruckId, autoHideNonDt);
+                    }
+                  }}
                   className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                     useDefaultTruck ? 'bg-emerald-500' : 'bg-slate-700'
                   }`}
-                  title="Klik untuk mengaktifkan / menonaktifkan Unit DT Default"
+                  title="Klik untuk mengaktifkan / menonaktifkan Unit Default"
                 >
                   <span
                     className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-slate-950 shadow-lg ring-0 transition duration-200 ease-in-out ${
@@ -674,7 +772,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs sm:text-sm font-bold text-white">Pilih DT Default</span>
+                    <span className="text-xs sm:text-sm font-bold text-white">Pilih Unit Default</span>
                     <span
                       className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
                         useDefaultTruck
@@ -687,18 +785,24 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-400">
                     {useDefaultTruck
-                      ? 'Semua biaya langsung dimasukkan ke unit DT terpilih tanpa melihat kode'
-                      : 'Murni logika otomatis. Kode cocok masuk unit, kode tak cocok/tanpa kode masuk ke Data Tidak Cocok'}
+                      ? 'Biaya tanpa kode masuk ke Unit Default terpilih (kode selain DT/EX/MB/GD seperti CP05 tetap tidak masuk)'
+                      : 'Murni mencocokkan huruf depan (DT, EX, MB, GD) & nomor unit dengan Armada'}
                   </p>
                 </div>
               </div>
 
-              {/* Dropdown Pemilihan Unit DT Default */}
+              {/* Dropdown Pemilihan Unit Default */}
               <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-300 shrink-0">Unit DT Default:</label>
+                <label className="text-xs font-semibold text-slate-300 shrink-0">Unit Default:</label>
                 <select
                   value={selectedDefaultTruckId}
-                  onChange={(e) => setSelectedDefaultTruckId(e.target.value)}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setSelectedDefaultTruckId(nextId);
+                    if (useDefaultTruck && inputText.trim() && (parsedItems.length > 0 || manualItems.length > 0)) {
+                      runTextParse(inputText, useDefaultTruck, nextId, autoHideNonDt);
+                    }
+                  }}
                   disabled={!useDefaultTruck}
                   className={`bg-slate-900 border rounded-xl px-3 py-1.5 text-xs font-bold transition focus:outline-none ${
                     useDefaultTruck
@@ -727,18 +831,18 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <div className="flex items-start gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-emerald-300">Kondisi Aktif (ON):</strong> Seluruh biaya yang ditempel otomatis langsung dimasukkan ke nomor DT default yang Anda pilih (
+                    <strong className="text-emerald-300">Kondisi Unit Default Aktif (ON):</strong> Rincian biaya otomatis dimasukkan ke unit{' '}
                     <strong className="text-white underline font-mono">
-                      {trucks.find((t) => t.id === selectedDefaultTruckId)?.code || 'DT Default'}
+                      {trucks.find((t) => t.id === selectedDefaultTruckId)?.code || 'Unit Default'}
                     </strong>
-                    ), <strong>tanpa melihat kode apapun</strong> di dalam teks.
+                    , namun jika ada blok unit dengan kode selain <strong>DT, EX, MB, GD</strong> (misal <code>CP05</code>), biaya tersebut tetap <strong>tidak dimasukkan</strong>.
                   </div>
                 </div>
               ) : (
                 <div className="flex items-start gap-2">
                   <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <strong className="text-amber-300">Kondisi Non-Aktif (OFF):</strong> Sistem murni memeriksa kode DT. Kode yang cocok otomatis masuk ke unit masing-masing. Kode yang tidak cocok di database atau baris tanpa kode akan disisihkan ke menu <strong>"Data Tidak Cocok / Edit Manual"</strong> agar tidak masuk sembarangan.
+                    <strong className="text-amber-300">Kondisi Pencocokan Huruf & Nomor (DT, EX, MB, GD):</strong> Sistem memeriksa huruf depan (<strong>DT, EX, MB, GD</strong>) dan nomor unitnya secara spesifik (contoh: <code>DT 90</code>, <code>GD 01</code>, <code>EX 46</code>, <code>MB 13</code>) sehingga tidak akan tertukar atau dobel antar jenis unit yang bernomor sama.
                   </div>
                 </div>
               )}
@@ -753,7 +857,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   rows={6}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder={`Tempel tulisan atau catatan biaya di sini. Contoh:\n\n* DT90\n  * Fuel: 17,445,413\n  * Lubricants: 397,387\n  * Sparepart: 1,668,882\n  * Tyre & Tubes: 243,000\n  * Workshop: 1,889,553\n\nDT 38\n- BPJS: 175,000\n- Jamsostek: 150,000\n- Beras: 250,000\n- Supir: 450,000`}
+                  placeholder={`Tempel tulisan atau catatan biaya di sini. Contoh:\n\n* DT 90\n  * Fuel: 17,445,413\n  * Lubricants: 397,387\n\n* EX 46\n  * Sparepart: 1,668,882\n  * Workshop: 1,889,553\n\n* MB 13\n  * Fuel: 2,450,000\n\n* GD 01\n  * Tyre & Tubes: 243,000`}
                   className="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3.5 font-mono text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition resize-y leading-relaxed"
                 />
               </div>
@@ -762,7 +866,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <Info className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>
-                    Format kode agar terbaca & masuk biaya hanya: <strong>DT 90</strong> atau <strong>DT90</strong> (selain itu tidak masuk).
+                    Kode didukung: <strong>DT, EX, MB, GD</strong> (contoh: <strong>DT 90, GD 01, EX 46, MB 13</strong>). Huruf & nomor dicocokkan persis agar tidak dobel.
                   </span>
                 </div>
 
@@ -815,10 +919,37 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                     {selectedFile ? selectedFile.name : 'Klik atau seret file Excel (.xlsx / .csv) ke sini'}
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Format kolom yang didukung: Unit/DT, Kategori, Keterangan, Nominal, Vendor, Tanggal.
+                    Format kolom yang didukung: Unit (DT 90, GD 01, EX 46, MB 13), Kategori, Keterangan, Nominal, Tanggal.
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* INFO JIKA SEMUA BARIS DITOLAK KARENA BUKAN KODE DT / EX / MB / GD */}
+          {parsedItems.length === 0 && manualItems.length === 0 && rejectedNonDtCount > 0 && (
+            <div className="p-4 bg-amber-500/15 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-200 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-amber-300 text-sm block">
+                    {rejectedNonDtCount} Baris Biaya Otomatis Tidak Dimasukkan (Bukan Kode DT, EX, MB, GD)
+                  </strong>
+                  <span className="text-slate-300">
+                    Sesuai kondisi, hanya kode dengan awalan <strong>DT, EX, MB, GD</strong> (contoh: DT 90, GD 01, EX 46, MB 13) yang masuk biaya. Baris dengan kode lain otomatis tidak dimasukkan.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoHideNonDt(false);
+                  runTextParse(inputText, useDefaultTruck, selectedDefaultTruckId, false);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 font-bold text-xs shrink-0 transition cursor-pointer"
+              >
+                Lihat {rejectedNonDtCount} Baris yang Ditolak
+              </button>
             </div>
           )}
 
@@ -831,11 +962,17 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   <div className="flex items-center gap-2 flex-wrap">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                     <h3 className="text-sm sm:text-base font-bold text-white">
-                      Hasil Pemilahan: {parsedItems.length + manualItems.length} Catatan Biaya Terdeteksi
+                      Hasil Pemilahan: {parsedItems.length} Biaya Masuk (DT / EX / MB / GD)
                     </h3>
+                    {rejectedNonDtCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        {rejectedNonDtCount} baris selain DT/EX/MB/GD tidak dimasukkan
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {parsedItems.length} baris otomatis cocok dengan unit DT &bull; {manualItems.length} baris disisihkan ke Pilah Manual.
+                    {parsedItems.length} baris kode (DT, EX, MB, GD) siap disimpan
+                    {manualItems.length > 0 ? ` • ${manualItems.length} baris di tab Tidak Masuk / Pilah Manual` : ''}.
                   </p>
                 </div>
 
@@ -863,7 +1000,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 </div>
               </div>
 
-              {/* Tab Switcher: Otomatis Cocok vs Sampah / Perlu Pilah Manual */}
+              {/* Tab Switcher: Otomatis Cocok vs Tidak Masuk / Perlu Pilah Manual */}
               <div className="flex items-center gap-2 border-b border-slate-800 pb-2 flex-wrap">
                 <button
                   type="button"
@@ -875,7 +1012,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   }`}
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Format Cocok (DT 90)</span>
+                  <span>Masuk Biaya (DT / EX / MB / GD)</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
                     activeResultTab === 'valid' ? 'bg-slate-950 text-emerald-400' : 'bg-slate-800 text-slate-300'
                   }`}>
@@ -893,7 +1030,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   }`}
                 >
                   <Trash2 className="w-4 h-4 text-rose-400" />
-                  <span>Sampah / Perlu Pilah Manual</span>
+                  <span>Tidak Masuk / Pilah Manual</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
                     manualItems.length > 0
                       ? activeResultTab === 'manual'
@@ -905,7 +1042,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   </span>
                   {manualItems.some((i) => Boolean(i.unrecognizedUnitCode)) && (
                     <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/30 text-rose-200 border border-rose-500/40">
-                      {manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length} Unit Tak Terdaftar
+                      {manualItems.filter((i) => Boolean(i.unrecognizedUnitCode)).length} Unit DT Belum Terdaftar
                     </span>
                   )}
                 </button>
