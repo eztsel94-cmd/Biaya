@@ -32,7 +32,9 @@ import {
   HeartHandshake,
   UserX,
   Layers,
+  QrCode,
 } from 'lucide-react';
+import { DriverQrCodeModal } from './DriverQrCodeModal';
 
 interface DriverPortalViewProps {
   truck: TruckUnit;
@@ -53,6 +55,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
@@ -177,6 +180,14 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowQrModal(true)}
+              title="Lihat & Download QR Code Mobil Ini"
+              className="px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 hover:text-white rounded-lg border border-emerald-500/40 transition flex items-center gap-1.5 text-xs font-semibold shadow-sm"
+            >
+              <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">QR Code</span>
+            </button>
             <button
               onClick={() => onOpenAddExpense(truck.id)}
               className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5"
@@ -556,6 +567,15 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Driver QR Code Modal */}
+      {showQrModal && (
+        <DriverQrCodeModal
+          isOpen={showQrModal}
+          onClose={() => setShowQrModal(false)}
+          truck={truck}
+        />
       )}
     </div>
   );

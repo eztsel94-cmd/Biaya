@@ -31,7 +31,9 @@ import {
   AlertTriangle,
   HeartHandshake,
   UserX,
+  QrCode,
 } from 'lucide-react';
+import { DriverQrCodeModal } from './DriverQrCodeModal';
 
 interface TrucksViewProps {
   trucks: TruckUnit[];
@@ -58,6 +60,7 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
   const [copiedTruckId, setCopiedTruckId] = useState<string | null>(null);
   const [truckToDelete, setTruckToDelete] = useState<TruckUnit | null>(null);
   const [deleteRelated, setDeleteRelated] = useState<boolean>(true);
+  const [qrModalTruck, setQrModalTruck] = useState<TruckUnit | null>(null);
 
   const totalAllCost = expenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -357,15 +360,23 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <button
+                      onClick={() => setQrModalTruck(truck)}
+                      className="py-1.5 px-2.5 bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-200 rounded-lg text-[11px] font-bold transition border border-emerald-500/40 flex items-center gap-1.5 shrink-0 shadow-sm"
+                      title="Buat & Download QR Code link supir"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>QR Code & Download</span>
+                    </button>
                     <a
                       href={waUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-[120px] py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                     >
                       <Share2 className="w-3.5 h-3.5" />
-                      Kirim via WhatsApp
+                      <span>WhatsApp</span>
                     </a>
                     <button
                       onClick={() => onOpenDriverPortal(truck.id)}
@@ -373,7 +384,7 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
                       title="Lihat persis seperti yang dibuka supir di HP"
                     >
                       <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-                      Buka Portal
+                      <span>Buka Portal</span>
                     </button>
                   </div>
 
@@ -601,6 +612,16 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Driver QR Code Modal */}
+      {qrModalTruck && (
+        <DriverQrCodeModal
+          isOpen={!!qrModalTruck}
+          onClose={() => setQrModalTruck(null)}
+          truck={qrModalTruck}
+          onOpenDriverPortal={onOpenDriverPortal}
+        />
       )}
     </div>
   );

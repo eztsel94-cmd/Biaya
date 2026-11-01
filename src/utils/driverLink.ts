@@ -2,13 +2,18 @@ import { TruckUnit } from '../types/truck';
 
 /**
  * Builds the direct, dedicated link for a driver to view only their DT.
- * Uses query parameter `dt` with the truck's unique identifier.
+ * Standardizes to include both ?dt=... (clean code) and &id=... (truck id)
+ * so it resolves reliably in any browser, iframe, or mobile client.
  */
-export function getDriverPortalUrl(truck: { id: string; code: string }): string {
-  if (typeof window === 'undefined') return `?dt=${encodeURIComponent(truck.id)}`;
+export function getDriverPortalUrl(truck: { id: string; code: string; plateNumber?: string }): string {
+  const cleanCode = truck.code.replace(/[\s\-_]+/g, '');
+  if (typeof window === 'undefined') {
+    return `?dt=${encodeURIComponent(cleanCode)}&id=${encodeURIComponent(truck.id)}`;
+  }
+
   const origin = window.location.origin;
   const pathname = window.location.pathname;
-  return `${origin}${pathname}?dt=${encodeURIComponent(truck.id)}`;
+  return `${origin}${pathname}?dt=${encodeURIComponent(cleanCode)}&id=${encodeURIComponent(truck.id)}`;
 }
 
 /**
@@ -37,7 +42,7 @@ export function getWhatsAppShareUrl(truck: TruckUnit, directUrl?: string): strin
   const url = directUrl || getDriverPortalUrl(truck);
   const phone = formatPhoneNumberForWhatsApp(truck.phone);
 
-  const message = `Halo Pak *${truck.driverName}*,\n\nBerikut link khusus untuk melihat data operasional & pengeluaran Dump Truck Anda (*${truck.code} - ${truck.plateNumber}*):\n\n👉 ${url}\n\n_Catatan: Link ini khusus untuk mobil Anda saja dan tidak menampilkan data mobil armada lainnya. Simpan link ini di WhatsApp atau bookmark di HP Anda._`;
+  const message = `Halo Pak *${truck.driverName}*,\n\nBerikut link khusus untuk melihat data operasional & pengeluaran Dump Truck Anda (*${truck.code} - ${truck.plateNumber}*):\n\n👉 ${url}\n\n📱 *Catatan Penting:*\n• Link ini khusus untuk mobil Anda saja dan tidak menampilkan data mobil armada lainnya.\n• Anda juga bisa menyimpan QR Code atau bookmark link ini di layar utama HP Anda agar mudah dibuka sewaktu-waktu.`;
 
   const encodedMessage = encodeURIComponent(message);
   if (phone) {
@@ -47,40 +52,148 @@ export function getWhatsAppShareUrl(truck: TruckUnit, directUrl?: string): strin
 }
 
 /**
- * Searches trucks for a match based on URL query parameter `dt` or `unit`.
+ * Robust search to find a truck from ANY URL query parameter, hash, or input value.
+ * Matches:
+ *  - Truck ID (e.g. "truck-1", "truck-2")
+ *  - Full code (e.g. "Unit 01", "DT 90", "Unit 90")
+ *  - Alphanumeric code (e.g. "unit01", "unit90", "dt90", "dt01", "dt-90")
+ *  - Numbers/digits (e.g. "90" matches "Unit 90" or "DT 90", "1" or "01" matches "Unit 01")
+ *  - Plate number (e.g. "BM 8456 TBS", "BM8456TBS", "8456")
+ *  - Driver name (e.g. "Agus", "Budi", "Hendra")
  */
 export function findTruckFromUrlQuery(trucks: TruckUnit[], queryString: string): TruckUnit | null {
   if (!queryString || !trucks || trucks.length === 0) return null;
 
-  const clean = queryString.trim().toLowerCase();
-  const cleanNoSpace = clean.replace(/[\s\-_]+/g, '');
+  // 1. Decode safely
+  let clean = queryString.trim();
+  try {
+    clean = decodeURIComponent(clean.replace(/\+/g, ' ')).trim();
+  } catch {
+    clean = queryString.trim();
+  }
 
-  // 1. Exact ID match
-  const matchId = trucks.find((t) => t.id.toLowerCase() === clean);
+  const cleanLower = clean.toLowerCase();
+  const cleanAlphanum = cleanLower.replace(/[^a-z0-9]/g, '');
+
+  if (!cleanAlphanum && !cleanLower) return null;
+
+  // 2. Exact ID match (case-insensitive)
+  const matchId = trucks.find(
+    (t) => t.id.toLowerCase() === cleanLower || t.id.toLowerCase() === cleanAlphanum
+  );
   if (matchId) return matchId;
 
-  // 2. Exact code match (e.g. "Unit 01", "DT 01", "unit 90")
-  const matchCode = trucks.find((t) => t.code.toLowerCase() === clean);
+  // 3. Exact code match (e.g. "Unit 01", "DT 90")
+  const matchCode = trucks.find((t) => t.code.toLowerCase().trim() === cleanLower);
   if (matchCode) return matchCode;
 
-  // 3. Normalized code match (e.g. "unit01", "dt01", "unit90", "dt90", "unit-01", "dt-01")
+  // 4. Normalized code match with "dt" and "unit" interchangeability
   const matchCodeNormalized = trucks.find((t) => {
-    const tCodeClean = t.code.toLowerCase().replace(/[\s\-_]+/g, '');
-    const tPlateClean = t.plateNumber.toLowerCase().replace(/[\s\-_]+/g, '');
+    const tCodeAlphanum = t.code.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (tCodeAlphanum === cleanAlphanum) return true;
 
-    // Allow dt01 matching unit01
-    const tDtClean = tCodeClean.replace('unit', 'dt');
-    const paramDtClean = cleanNoSpace.replace('unit', 'dt');
+    // Interchange unit <-> dt
+    const tAsDt = tCodeAlphanum.replace(/^unit/, 'dt');
+    const paramAsDt = cleanAlphanum.replace(/^unit/, 'dt');
+    if (tAsDt === paramAsDt) return true;
 
-    return (
-      tCodeClean === cleanNoSpace ||
-      tDtClean === paramDtClean ||
-      tPlateClean === cleanNoSpace ||
-      tPlateClean.includes(cleanNoSpace)
-    );
+    const tAsUnit = tCodeAlphanum.replace(/^dt/, 'unit');
+    const paramAsUnit = cleanAlphanum.replace(/^dt/, 'unit');
+    if (tAsUnit === paramAsUnit) return true;
+
+    return false;
   });
+  if (matchCodeNormalized) return matchCodeNormalized;
 
-  return matchCodeNormalized || null;
+  // 5. Numeric sequence match: if query has digits (e.g. "90", "01", "1", "3")
+  const queryDigitsMatch = cleanLower.match(/\d+/);
+  if (queryDigitsMatch) {
+    const queryNum = parseInt(queryDigitsMatch[0], 10);
+    if (!isNaN(queryNum)) {
+      const matchNumber = trucks.find((t) => {
+        const truckDigits = t.code.match(/\d+/);
+        if (truckDigits) {
+          const tNum = parseInt(truckDigits[0], 10);
+          return tNum === queryNum;
+        }
+        return false;
+      });
+      if (matchNumber) return matchNumber;
+    }
+  }
+
+  // 6. Plate Number match
+  const matchPlate = trucks.find((t) => {
+    const tPlateClean = t.plateNumber.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (tPlateClean === cleanAlphanum) return true;
+    if (cleanAlphanum.length >= 3 && tPlateClean.includes(cleanAlphanum)) return true;
+
+    // Check 4-digit plate number
+    const plateDigits = t.plateNumber.match(/\d+/);
+    if (queryDigitsMatch && plateDigits && plateDigits[0] === queryDigitsMatch[0]) return true;
+    return false;
+  });
+  if (matchPlate) return matchPlate;
+
+  // 7. Driver Name match
+  const matchDriver = trucks.find((t) => {
+    const driverClean = t.driverName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (driverClean.includes(cleanAlphanum) || cleanAlphanum.includes(driverClean)) return true;
+    return false;
+  });
+  if (matchDriver) return matchDriver;
+
+  return null;
+}
+
+/**
+ * Extracts any potential driver portal query from the current browser location.
+ * Looks in search query params (?dt=..., ?id=..., ?unit=..., ?driver=..., etc.)
+ * and URL hash (#dt=..., #unit=..., etc.)
+ */
+export function extractDriverQueryFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
+    const hashParams = hash ? new URLSearchParams(hash) : null;
+
+    // Direct priority params
+    const candidates = [
+      urlParams.get('dt'),
+      urlParams.get('id'),
+      urlParams.get('unit'),
+      urlParams.get('driver'),
+      urlParams.get('supir'),
+      urlParams.get('truck'),
+      urlParams.get('truckId'),
+      urlParams.get('mobil'),
+      hashParams?.get('dt'),
+      hashParams?.get('id'),
+      hashParams?.get('unit'),
+      hashParams?.get('driver'),
+      hashParams?.get('supir'),
+    ];
+
+    for (const val of candidates) {
+      if (val && val.trim().length > 0) {
+        return val.trim();
+      }
+    }
+
+    // Check hash patterns like #/dt/90 or #dt-90 or #unit90 or #DT90
+    if (hash) {
+      const cleanHash = hash.replace(/^\/+/, '');
+      if (cleanHash.startsWith('dt-') || cleanHash.startsWith('dt') || cleanHash.startsWith('unit')) {
+        return cleanHash;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to extract driver query from location:', err);
+  }
+
+  return null;
 }
 
 /**
@@ -122,4 +235,3 @@ export function getWhatsAppSharePemuatUrl(options?: {
   }
   return `https://wa.me/?text=${encodedMessage}`;
 }
-

@@ -18,7 +18,7 @@ import { UserRoleModal } from './components/UserRoleModal';
 import { DriverPortalView } from './components/DriverPortalView';
 import { PemuatPortalView } from './components/PemuatPortalView';
 import { SettingsView } from './components/SettingsView';
-import { findTruckFromUrlQuery } from './utils/driverLink';
+import { findTruckFromUrlQuery, extractDriverQueryFromLocation } from './utils/driverLink';
 import {
   api,
   CLIENT_AUTHOR_ID,
@@ -48,6 +48,7 @@ export default function App() {
 
   // Dedicated Driver Portal Mode
   const [driverPortalTruckId, setDriverPortalTruckId] = useState<string | null>(null);
+  const [driverPortalQuery, setDriverPortalQuery] = useState<string | null>(() => extractDriverQueryFromLocation());
 
   // Dedicated Pemuat Portal Mode (Akses Khusus Terisolasi untuk Pemuat)
   const [isPemuatPortalMode, setIsPemuatPortalMode] = useState<boolean>(false);
@@ -153,16 +154,15 @@ export default function App() {
           return;
         }
 
-        // B. Cek Akses Khusus Driver Dump Truck (?dt=... atau ?unit=...)
-        let query = urlParams.get('dt') || urlParams.get('unit');
-        if (!query && hashParams) {
-          query = hashParams.get('dt') || hashParams.get('unit') || hash;
-        }
-
-        if (query && trucks.length > 0) {
-          const matched = findTruckFromUrlQuery(trucks, query);
-          if (matched) {
-            setDriverPortalTruckId(matched.id);
+        // B. Cek Akses Khusus Driver Dump Truck (?dt=... atau ?unit=... atau ?id=...)
+        const query = extractDriverQueryFromLocation();
+        if (query) {
+          setDriverPortalQuery(query);
+          if (trucks.length > 0) {
+            const matched = findTruckFromUrlQuery(trucks, query);
+            if (matched) {
+              setDriverPortalTruckId(matched.id);
+            }
           }
         }
       } catch (e) {
@@ -172,7 +172,11 @@ export default function App() {
 
     checkUrlForPortals();
     window.addEventListener('popstate', checkUrlForPortals);
-    return () => window.removeEventListener('popstate', checkUrlForPortals);
+    window.addEventListener('hashchange', checkUrlForPortals);
+    return () => {
+      window.removeEventListener('popstate', checkUrlForPortals);
+      window.removeEventListener('hashchange', checkUrlForPortals);
+    };
   }, [trucks]);
 
   // Handle data actions with backend API
@@ -309,11 +313,44 @@ export default function App() {
     setIsExcelImportOpen(true);
   };
 
+  // Helper untuk membuka portal supir dan memperbarui URL tanpa reload
+  const handleEnterDriverPortal = (truckId: string) => {
+    setDriverPortalTruckId(truckId);
+    const target = trucks.find((t) => t.id === truckId);
+    if (target) {
+      setDriverPortalQuery(target.code);
+      if (typeof window !== 'undefined' && window.history.pushState) {
+        const cleanCode = target.code.replace(/[\s\-_]+/g, '');
+        const cleanUrl = `${window.location.origin}${window.location.pathname}?dt=${encodeURIComponent(cleanCode)}&id=${encodeURIComponent(target.id)}`;
+        window.history.pushState({ path: cleanUrl }, '', cleanUrl);
+      }
+    }
+  };
+
   // 3. IF IN DEDICATED DRIVER PORTAL MODE:
   // Render ONLY this driver's Dump Truck data!
-  const activeDriverTruck = driverPortalTruckId
-    ? trucks.find((t) => t.id === driverPortalTruckId)
-    : null;
+  const activeDriverTruck = React.useMemo(() => {
+    if (driverPortalTruckId) {
+      const match = trucks.find((t) => t.id === driverPortalTruckId);
+      if (match) return match;
+    }
+    if (driverPortalQuery) {
+      const match = findTruckFromUrlQuery(trucks, driverPortalQuery);
+      if (match) return match;
+    }
+    return null;
+  }, [trucks, driverPortalTruckId, driverPortalQuery]);
+
+  // Jika URL memiliki parameter supir (?dt=...) tetapi data truk masih dimuat dari Firestore:
+  if (driverPortalQuery && !activeDriverTruck && trucks.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-white font-bold text-lg">Membuka Portal Supir...</h2>
+        <p className="text-slate-400 text-xs mt-1">Menghubungkan unit armada Dump Truck ke cloud Firestore...</p>
+      </div>
+    );
+  }
 
   if (activeDriverTruck) {
     return (
@@ -347,11 +384,12 @@ export default function App() {
           currentUser={currentUser}
           onOpenAddExpense={(truckId) => handleOpenAddExpense(truckId)}
           onExitDriverMode={() => {
-            if (window.history.pushState) {
+            if (typeof window !== 'undefined' && window.history.pushState) {
               const cleanUrl = window.location.origin + window.location.pathname;
               window.history.pushState({ path: cleanUrl }, '', cleanUrl);
             }
             setDriverPortalTruckId(null);
+            setDriverPortalQuery(null);
           }}
         />
 
@@ -505,7 +543,7 @@ service cloud.firestore {
             onOpenAddExpense={handleOpenAddExpense}
             onOpenDataManager={() => setIsDataManagerOpen(true)}
             onNavigateToExpensesWithFilter={handleNavigateToExpensesWithTruck}
-            onOpenDriverPortal={(truckId) => setDriverPortalTruckId(truckId)}
+            onOpenDriverPortal={handleEnterDriverPortal}
             onOpenExcelImport={handleOpenExcelImport}
             onDeleteTruck={handleDeleteTruck}
           />
@@ -584,7 +622,7 @@ service cloud.firestore {
         onDeleteTruck={handleDeleteTruck}
         onResetToDefault3Units={handleResetToDefault3Units}
         onImportData={handleImportData}
-        onOpenDriverPortal={(truckId) => setDriverPortalTruckId(truckId)}
+        onOpenDriverPortal={handleEnterDriverPortal}
       />
 
       <AddExpenseModal

@@ -17,7 +17,9 @@ import {
   Copy,
   Share2,
   ExternalLink,
+  QrCode,
 } from 'lucide-react';
+import { DriverQrCodeModal } from './DriverQrCodeModal';
 
 interface DataManagerModalProps {
   isOpen: boolean;
@@ -48,6 +50,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [copiedTruckId, setCopiedTruckId] = useState<string | null>(null);
   const [justAddedTruck, setJustAddedTruck] = useState<TruckUnit | null>(null);
+  const [qrTruck, setQrTruck] = useState<TruckUnit | null>(null);
 
   // New truck form state
   const [newTruckForm, setNewTruckForm] = useState({
