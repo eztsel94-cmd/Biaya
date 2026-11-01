@@ -16,11 +16,12 @@ import {
   RotateCcw,
   Users,
   Settings,
+  BarChart3,
 } from 'lucide-react';
 
 import { AppUser } from '../types/truck';
 
-export type NavTabType = 'daily_records' | 'pemuat_portal' | 'dashboard' | 'trucks' | 'expenses' | 'settings';
+export type NavTabType = 'daily_records' | 'pemuat_portal' | 'dashboard' | 'monthly_report' | 'trucks' | 'expenses' | 'settings';
 
 interface NavbarProps {
   activeTab: NavTabType;
@@ -119,6 +120,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <LayoutDashboard className="w-4 h-4" />
                 <span>Dashboard</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('monthly_report')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all ${
+                  activeTab === 'monthly_report'
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-sm shadow-amber-500/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4 text-amber-400" />
+                <span>Laporan Bulanan</span>
               </button>
 
               <button
@@ -245,7 +258,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* 2. NATIVE MOBILE BOTTOM NAVIGATION BAR (KHUSUS LAYAR HP) */}
       {/* ========================================================================= */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 shadow-2xl safe-area-inset-bottom">
-        <div className="grid grid-cols-5 h-16 items-center px-1 max-w-md mx-auto">
+        <div className="grid grid-cols-6 h-16 items-center px-1 max-w-md mx-auto">
           {/* Tab 1: Catatan Harian */}
           <button
             type="button"
@@ -280,7 +293,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="text-[10px] mt-1 tracking-tight">Pemuat</span>
           </button>
 
-          {/* Tab 3: Dashboard */}
+          {/* Tab 3: Laporan Bulanan */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('monthly_report')}
+            className={`flex flex-col items-center justify-center h-full py-1 transition-all ${
+              activeTab === 'monthly_report' ? 'text-amber-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-5 h-5" />
+            <span className="text-[10px] mt-1 tracking-tight">Bulanan</span>
+          </button>
+
+          {/* Tab 4: Dashboard */}
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
@@ -292,7 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="text-[10px] mt-1 tracking-tight">Dashboard</span>
           </button>
 
-          {/* Tab 4: Armada */}
+          {/* Tab 5: Armada */}
           <button
             type="button"
             onClick={() => setActiveTab('trucks')}
@@ -309,7 +334,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="text-[10px] mt-1 tracking-tight">Armada</span>
           </button>
 
-          {/* Tab 5: Menu & Aksi Cepat */}
+          {/* Tab 6: Menu & Aksi Cepat */}
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(true)}
@@ -494,6 +519,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>Dashboard Ringkasan Biaya</span>
                 </span>
                 <span className="text-[10px] text-emerald-400 font-mono">Buka &rarr;</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('monthly_report');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === 'monthly_report' ? 'bg-amber-500/20 text-amber-400' : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-amber-400" />
+                  <span>Laporan Bulanan (Grafik Perbandingan DT)</span>
+                </span>
+                <span className="text-[10px] text-amber-400 font-mono">Buka &rarr;</span>
               </button>
 
               <button

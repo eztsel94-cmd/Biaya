@@ -164,7 +164,8 @@ function setPermissionError(err: any) {
 // 1. MODUL ARMADA TRUK (onSnapshot Real-time)
 // ==========================================
 
-let isTrucksBootstrapped = false;
+const SAMPLE_TRUCK_IDS = new Set(["truck-1", "truck-2", "truck-3"]);
+const SAMPLE_TRUCK_PLATES = new Set(["BM 8120 TBS", "BM 8456 TBS", "BM 9312 TBS"]);
 
 export function subscribeToFirestoreTrucks(
   onData: (trucks: TruckUnit[]) => void,
@@ -174,26 +175,25 @@ export function subscribeToFirestoreTrucks(
     const q = query(trucksCollection, orderBy("code", "asc"));
     return onSnapshot(
       q,
-      async (snapshot) => {
+      (snapshot) => {
         setPermissionError(null);
-        if (snapshot.empty && !isTrucksBootstrapped) {
-          isTrucksBootstrapped = true;
-          console.info("Koleksi armada di Firestore masih kosong. Melakukan inisialisasi armada default...");
-          try {
-            await bootstrapInitialTrucks();
-            return;
-          } catch (e) {
-            console.warn("Bootstrap armada gagal:", e);
-          }
-        }
 
         const items: TruckUnit[] = [];
+        const sampleRefsToDelete: any[] = [];
+
         snapshot.forEach((docSnapshot) => {
           const d = docSnapshot.data();
+          const plate = String(d.plateNumber || "").trim().toUpperCase();
+          // Bersihkan otomatis jika masih ada dokumen armada contoh bawaan lama di Firestore
+          if (SAMPLE_TRUCK_IDS.has(docSnapshot.id) || SAMPLE_TRUCK_PLATES.has(plate)) {
+            sampleRefsToDelete.push(docSnapshot.ref);
+            return;
+          }
+
           items.push({
             id: docSnapshot.id,
             code: d.code || "DT -",
-            plateNumber: d.plateNumber || "BM 0000 TBS",
+            plateNumber: d.plateNumber || "-",
             driverName: d.driverName || "Supir",
             phone: d.phone,
             model: d.model || "Truk Dump TBS",
@@ -203,6 +203,13 @@ export function subscribeToFirestoreTrucks(
             notes: d.notes,
           });
         });
+
+        if (sampleRefsToDelete.length > 0) {
+          const batch = writeBatch(db);
+          sampleRefsToDelete.forEach((ref) => batch.delete(ref));
+          batch.commit().catch((err) => console.warn("Gagal membersihkan armada contoh lama:", err));
+        }
+
         onData(items);
       },
       (error) => {
@@ -220,23 +227,7 @@ export function subscribeToFirestoreTrucks(
 }
 
 export async function bootstrapInitialTrucks(): Promise<void> {
-  const batch = writeBatch(db);
-  INITIAL_TRUCKS.forEach((truck) => {
-    const docRef = doc(db, COLLECTIONS.TRUCKS, truck.id);
-    batch.set(docRef, {
-      code: truck.code,
-      plateNumber: truck.plateNumber,
-      driverName: truck.driverName,
-      phone: truck.phone || "",
-      model: truck.model,
-      capacity: truck.capacity,
-      status: truck.status,
-      year: truck.year,
-      notes: truck.notes || "",
-      createdAt: serverTimestamp(),
-    });
-  });
-  await batch.commit();
+  // Dinonaktifkan agar tidak pernah mengisi data contoh otomatis
 }
 
 export async function addTruckFirestore(truck: Omit<TruckUnit, "id">): Promise<TruckUnit> {
@@ -300,7 +291,21 @@ export async function deleteTruckFirestore(id: string, deleteRelated: boolean): 
 // 2. MODUL BIAYA UNIT (onSnapshot Real-time)
 // ==========================================
 
-let isExpensesBootstrapped = false;
+export function normalizeExpenseCategory(raw: any): ExpenseRecord["category"] {
+  const val = String(raw || "").trim();
+  const lower = val.toLowerCase();
+  if (lower === "fuel" || lower === "minyak" || lower === "solar" || lower === "bbm") return "Fuel";
+  if (lower === "lubricant" || lower === "oli" || lower === "pelumas") return "Lubricant";
+  if (lower === "sparepart" || lower === "spare part") return "Sparepart";
+  if (lower === "tyre & tubes" || lower === "tyre & tube" || lower === "ban" || lower === "tyre") return "Tyre & Tubes";
+  if (lower === "workshop" || lower === "mekanik" || lower === "bengkel") return "Workshop";
+  if (lower === "bpjs" || lower === "tunjangan bpjs") return "BPJS";
+  if (lower === "jamsostek" || lower === "tunjangan jamsostek") return "Jamsostek";
+  if (lower === "potongan mangkir" || lower === "mangkir") return "Potongan Mangkir";
+  if (lower === "beras" || lower === "tunjangan beras" || lower === "catu beras") return "Beras";
+  if (lower === "supir" || lower === "sopir" || lower === "driver") return "Supir";
+  return "Sparepart";
+}
 
 export function subscribeToFirestoreExpenses(
   onData: (expenses: ExpenseRecord[]) => void,
@@ -313,32 +318,41 @@ export function subscribeToFirestoreExpenses(
       (snapshot) => {
         setPermissionError(null);
 
-        // Jika koleksi biaya di Firestore masih kosong, masukkan 22 data contoh secara otomatis
-        if (snapshot.empty && !isExpensesBootstrapped) {
-          isExpensesBootstrapped = true;
-          bootstrapInitialExpenses().catch((err) => {
-            console.warn("Auto-bootstrap initial expenses failed:", err);
-          });
-          onData(INITIAL_EXPENSES);
-          return;
-        }
-
         const items: ExpenseRecord[] = [];
+        const sampleRefsToDelete: any[] = [];
+
         snapshot.forEach((docSnapshot) => {
           const d = docSnapshot.data();
+          // Bersihkan otomatis jika dokumen adalah data contoh bawaan lama (exp-01 s/d exp-22 atau milik truck-1..3)
+          if (
+            /^exp-\d+$/.test(docSnapshot.id) ||
+            SAMPLE_TRUCK_IDS.has(String(d.truckId || "")) ||
+            d.createdByName === "Sistem Default"
+          ) {
+            sampleRefsToDelete.push(docSnapshot.ref);
+            return;
+          }
+
           items.push({
             id: docSnapshot.id,
             truckId: d.truckId || "",
-            category: d.category || "Sparepart",
+            category: normalizeExpenseCategory(d.category),
             amount: typeof d.amount === "number" ? d.amount : parseFloat(d.amount) || 0,
             date: d.date || new Date().toISOString().split("T")[0],
             description: d.description || "-",
-            vendor: d.vendor || "Gudang Traksi",
+            vendor: d.vendor || "",
             invoiceNumber: d.invoiceNumber || undefined,
             createdByName: d.createdByName || undefined,
             createdAt: d.createdAt ? (typeof d.createdAt.toDate === 'function' ? d.createdAt.toDate().toISOString() : String(d.createdAt)) : new Date().toISOString(),
           });
         });
+
+        if (sampleRefsToDelete.length > 0) {
+          const batch = writeBatch(db);
+          sampleRefsToDelete.forEach((ref) => batch.delete(ref));
+          batch.commit().catch((err) => console.warn("Gagal membersihkan biaya contoh lama:", err));
+        }
+
         onData(items);
       },
       (error) => {
@@ -356,22 +370,7 @@ export function subscribeToFirestoreExpenses(
 }
 
 export async function bootstrapInitialExpenses(): Promise<void> {
-  const batch = writeBatch(db);
-  INITIAL_EXPENSES.forEach((exp) => {
-    const docRef = doc(db, COLLECTIONS.EXPENSES, exp.id);
-    batch.set(docRef, {
-      truckId: exp.truckId,
-      category: exp.category,
-      amount: exp.amount,
-      date: exp.date,
-      description: exp.description,
-      vendor: exp.vendor || "Gudang Traksi",
-      invoiceNumber: exp.invoiceNumber || "",
-      createdByName: exp.createdByName || "Sistem Default",
-      createdAt: serverTimestamp(),
-    });
-  });
-  await batch.commit();
+  // Dinonaktifkan agar tidak pernah mengisi data contoh otomatis
 }
 
 export async function addExpenseFirestore(
@@ -526,6 +525,38 @@ export async function deleteDailyRecord(id: string): Promise<void> {
   await deleteDoc(targetDoc);
 }
 
+export async function deleteAllDailyRecords(targetIds?: string[]): Promise<number> {
+  if (targetIds && targetIds.length > 0) {
+    const chunkSize = 400;
+    let deletedCount = 0;
+    for (let i = 0; i < targetIds.length; i += chunkSize) {
+      const chunk = targetIds.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach((id) => {
+        batch.delete(doc(db, COLLECTIONS.DAILY_RECORDS, id));
+      });
+      await batch.commit();
+      deletedCount += chunk.length;
+    }
+    return deletedCount;
+  }
+
+  const snap = await getDocs(dailyRecordsCollection);
+  if (snap.empty) return 0;
+
+  const docs = snap.docs;
+  const chunkSize = 400;
+  let deletedCount = 0;
+  for (let i = 0; i < docs.length; i += chunkSize) {
+    const chunk = docs.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    chunk.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    deletedCount += chunk.length;
+  }
+  return deletedCount;
+}
+
 export async function updateDailyRecord(record: DailyRecord): Promise<void> {
   const targetDoc = doc(db, COLLECTIONS.DAILY_RECORDS, record.id);
   await updateDoc(targetDoc, {
@@ -544,38 +575,10 @@ export async function updateDailyRecord(record: DailyRecord): Promise<void> {
 // 3B. MASTER NAMA PEMUAT TBS (Otomatis & Real-time)
 // ==========================================
 
-export const INITIAL_DEFAULT_PEMUAT = [
-  "ANTON",
-  "DELFIN",
-  "YUVEN",
-  "BAMBANG",
-  "CANDRA",
-  "DEDIK",
-  "EKO",
-  "SURYANTO",
-];
-
-let isPemuatBootstrapped = false;
+export const INITIAL_DEFAULT_PEMUAT: string[] = [];
 
 export async function bootstrapInitialPemuat(): Promise<void> {
-  if (isPemuatBootstrapped) return;
-  try {
-    const snap = await getDocs(pemuatCollection);
-    if (snap.empty) {
-      const batch = writeBatch(db);
-      for (const name of INITIAL_DEFAULT_PEMUAT) {
-        const docRef = doc(pemuatCollection);
-        batch.set(docRef, {
-          name: name.trim(),
-          createdAt: serverTimestamp(),
-        });
-      }
-      await batch.commit();
-    }
-    isPemuatBootstrapped = true;
-  } catch (err) {
-    console.warn("Bootstrap pemuat notice:", err);
-  }
+  // Dinonaktifkan agar tidak pernah mengisi nama pemuat contoh otomatis
 }
 
 export function subscribeToFirestorePemuat(
@@ -583,7 +586,6 @@ export function subscribeToFirestorePemuat(
   onError?: (error: Error) => void
 ): Unsubscribe {
   try {
-    bootstrapInitialPemuat();
     const q = query(pemuatCollection, orderBy("name", "asc"));
     return onSnapshot(
       q,
@@ -599,13 +601,7 @@ export function subscribeToFirestorePemuat(
             });
           }
         });
-
-        // Jika Firestore masih kosong, berikan fallback default
-        if (list.length === 0) {
-          onData(INITIAL_DEFAULT_PEMUAT.map((n, i) => ({ id: `default-${i}`, name: n })));
-        } else {
-          onData(list);
-        }
+        onData(list);
       },
       (error) => {
         console.error("Firebase pemuat onSnapshot error:", error);
@@ -685,20 +681,15 @@ export async function clearAllDemoDataFirestore(): Promise<{ deletedDaily: numbe
 }
 
 export async function resetAllFirestoreData(): Promise<{ trucks: TruckUnit[]; expenses: ExpenseRecord[] }> {
-  // 1. Bersihkan seluruh data lama
-  const existingTrucksSnap = await getDocs(trucksCollection);
+  // Bersihkan seluruh data biaya contoh tanpa memasukkan data dummy lagi
   const existingExpSnap = await getDocs(expensesCollection);
+  if (!existingExpSnap.empty) {
+    const cleanBatch = writeBatch(db);
+    existingExpSnap.forEach((d) => cleanBatch.delete(d.ref));
+    await cleanBatch.commit();
+  }
 
-  const cleanBatch = writeBatch(db);
-  existingTrucksSnap.forEach((d) => cleanBatch.delete(d.ref));
-  existingExpSnap.forEach((d) => cleanBatch.delete(d.ref));
-  await cleanBatch.commit();
-
-  // 2. Isi ulang profil unit armada resmi dan data contoh biaya
-  await bootstrapInitialTrucks();
-  await bootstrapInitialExpenses();
-
-  return { trucks: INITIAL_TRUCKS, expenses: INITIAL_EXPENSES };
+  return { trucks: [], expenses: [] };
 }
 
 export async function importAllFirestoreData(data: {

@@ -530,6 +530,16 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    {/* QR Code Button */}
+                    <button
+                      onClick={() => setQrTruck(truck)}
+                      className="px-2.5 py-1.5 bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 text-xs font-bold rounded-lg border border-emerald-500/40 transition flex items-center gap-1"
+                      title="Buat & Download QR Code link supir"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>QR Code</span>
+                    </button>
+
                     {/* Salin Link Button */}
                     <button
                       onClick={() => handleCopyLink(driverUrl, truck.id)}
@@ -803,6 +813,19 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Driver QR Code Modal */}
+      {qrTruck && (
+        <DriverQrCodeModal
+          isOpen={!!qrTruck}
+          onClose={() => setQrTruck(null)}
+          truck={qrTruck}
+          onOpenDriverPortal={onOpenDriverPortal ? (id) => {
+            onClose();
+            onOpenDriverPortal(id);
+          } : undefined}
+        />
       )}
     </div>
   );

@@ -41,6 +41,7 @@ import {
   addDailyRecord,
   updateDailyRecord,
   deleteDailyRecord,
+  deleteAllDailyRecords,
   subscribeToFirestorePemuat,
   addPemuatFirestore,
   deletePemuatFirestore,
@@ -48,7 +49,7 @@ import {
 import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl } from '../utils/driverLink';
 
-const QUICK_TRUCKS = ['DT 90', 'DT 01', 'DT 02', 'DT 03', 'DT 05', 'DT 08', 'DT 10', 'DT 12'];
+const QUICK_TRUCKS: string[] = [];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
 
 export const INDO_MONTHS = [
@@ -123,12 +124,24 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   const todayStr = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState<NewDailyRecord>({
     date: todayStr,
-    truckNumber: 'DT 90',
+    truckNumber: trucks.length > 0 ? trucks[0].code : '',
     driverName: initialPemuatName || '',
     tonnage: '' as any,
     afdeling: 'Afdeling 1',
     notes: '',
   });
+
+  // Sinkronkan pilihan awal Nomor Unit Truk dengan Armada yang terdata
+  useEffect(() => {
+    if (dynamicTruckCodes.length > 0) {
+      setFormData((prev) => {
+        if (!prev.truckNumber || (!dynamicTruckCodes.includes(prev.truckNumber) && prev.truckNumber === 'DT 90')) {
+          return { ...prev, truckNumber: dynamicTruckCodes[0] };
+        }
+        return prev;
+      });
+    }
+  }, [dynamicTruckCodes]);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -145,6 +158,55 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   // Delete modal state
   const [recordToDelete, setRecordToDelete] = useState<DailyRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState<boolean>(false);
+  const [isDeletingAll, setIsDeletingAll] = useState<boolean>(false);
+
+  // Helper format angka tonase otomatis (contoh tekan 6, 7, 9 -> 6,79)
+  const formatTonDigits = (digits: string): string => {
+    const clean = digits.replace(/\D/g, '').slice(0, 3);
+    if (!clean) return '';
+    if (clean.length === 1) return clean;
+    return `${clean[0]},${clean.slice(1)}`;
+  };
+
+  const handleTonDigitPress = (digit: string, isEdit = false) => {
+    if (isEdit) {
+      if (!editFormData) return;
+      const currentDigits = String(editFormData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.length >= 3 ? digit : currentDigits + digit;
+      setEditFormData({ ...editFormData, tonnage: formatTonDigits(nextDigits) as any });
+    } else {
+      const currentDigits = String(formData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.length >= 3 ? digit : currentDigits + digit;
+      setFormData((prev) => ({ ...prev, tonnage: formatTonDigits(nextDigits) as any }));
+    }
+  };
+
+  const handleTonBackspace = (isEdit = false) => {
+    if (isEdit) {
+      if (!editFormData) return;
+      const currentDigits = String(editFormData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.slice(0, -1);
+      setEditFormData({ ...editFormData, tonnage: formatTonDigits(nextDigits) as any });
+    } else {
+      const currentDigits = String(formData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.slice(0, -1);
+      setFormData((prev) => ({ ...prev, tonnage: formatTonDigits(nextDigits) as any }));
+    }
+  };
+
+  const handleTonInputChange = (rawVal: string, isEdit = false) => {
+    let formatted = rawVal;
+    if (/^\d{2,3}$/.test(rawVal)) {
+      formatted = `${rawVal[0]},${rawVal.slice(1)}`;
+    }
+    if (isEdit) {
+      if (!editFormData) return;
+      setEditFormData({ ...editFormData, tonnage: formatted as any });
+    } else {
+      setFormData((prev) => ({ ...prev, tonnage: formatted as any }));
+    }
+  };
 
   // Share state
   const [isCopied, setIsCopied] = useState<boolean>(false);
@@ -254,9 +316,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       showToast('Mohon masukkan Nama Pemuat (pilih dari daftar atau ketik)', 'error');
       return;
     }
-    const ton = parseFloat(String(formData.tonnage));
+    const ton = parseFloat(String(formData.tonnage).replace(',', '.'));
     if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 8.5)', 'error');
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
       return;
     }
 
@@ -299,9 +361,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     e.preventDefault();
     if (!editFormData) return;
 
-    const ton = parseFloat(String(editFormData.tonnage));
+    const ton = parseFloat(String(editFormData.tonnage).replace(',', '.'));
     if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka', 'error');
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
       return;
     }
 
@@ -339,6 +401,22 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       showToast(`Gagal menghapus data: ${err.message}`, 'error');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Confirm Delete All
+  const confirmDeleteAll = async () => {
+    if (records.length === 0) return;
+    setIsDeletingAll(true);
+    try {
+      const targetIds = records.map((r) => r.id);
+      const count = await deleteAllDailyRecords(targetIds);
+      showToast(`Berhasil menghapus semua (${count}) data riwayat pengiriman!`, 'info');
+      setIsDeleteAllModalOpen(false);
+    } catch (err: any) {
+      showToast(`Gagal menghapus semua data: ${err.message}`, 'error');
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -833,29 +911,40 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
               {/* Nomor Unit Truk */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                  Nomor Unit Truk:
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                    Nomor Unit Truk:
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-mono">
+                    {dynamicTruckCodes.length} Unit Armada
+                  </span>
+                </div>
                 <input
                   type="text"
+                  list="pemuat-portal-truck-list"
                   value={formData.truckNumber}
                   onChange={(e) => setFormData((prev) => ({ ...prev, truckNumber: e.target.value }))}
-                  placeholder="Contoh: DT 90"
+                  placeholder={dynamicTruckCodes[0] ? `Contoh: ${dynamicTruckCodes[0]}` : 'Pilih Unit DT'}
                   required
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-bold uppercase"
                 />
-                {/* Quick Unit Pills dari Armada */}
-                <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                  {dynamicTruckCodes.slice(0, 5).map((dt) => (
+                <datalist id="pemuat-portal-truck-list">
+                  {dynamicTruckCodes.map((dt) => (
+                    <option key={dt} value={dt} />
+                  ))}
+                </datalist>
+                {/* Quick Unit Pills dari Seluruh Armada yang Terinput */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  {dynamicTruckCodes.map((dt) => (
                     <button
                       key={dt}
                       type="button"
                       onClick={() => setFormData((prev) => ({ ...prev, truckNumber: dt }))}
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition cursor-pointer ${
-                        formData.truckNumber.toUpperCase() === dt
-                          ? 'bg-emerald-500 text-slate-950 font-bold'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      className={`text-[11px] px-2 py-1 rounded-lg font-mono transition border cursor-pointer ${
+                        formData.truckNumber.toUpperCase() === dt.toUpperCase()
+                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm'
+                          : 'bg-slate-800/80 text-slate-300 hover:text-white border-slate-700'
                       }`}
                     >
                       {dt}
@@ -866,17 +955,23 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
               {/* Tonase (Ton) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                  Tonase (Ton):
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                    Tonase (Tonase dalam Ton):
+                  </label>
+                  {formData.tonnage && (
+                    <span className="text-[10px] font-mono font-bold text-emerald-400">
+                      {String(formData.tonnage).replace('.', ',')} Ton
+                    </span>
+                  )}
+                </div>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0.1"
+                  type="text"
+                  inputMode="decimal"
                   value={formData.tonnage}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, tonnage: e.target.value as any }))}
-                  placeholder="Contoh: 8.4"
+                  onChange={(e) => handleTonInputChange(e.target.value, false)}
+                  placeholder="Contoh: 6,79"
                   required
                   className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-emerald-400 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400 font-bold font-mono text-base"
                 />
@@ -917,6 +1012,44 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     Khusus {formData.afdeling}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Tombol Pilih Angka Tonase (1, 2, 3, 4, 5, 6, 7, 8, 9, 0) */}
+            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Pilih Angka Tonase Cepat (Tekan <strong className="text-emerald-400">6</strong>, <strong className="text-emerald-400">7</strong>, <strong className="text-emerald-400">9</strong> &rarr; <strong className="text-white">6,79</strong> ton):</span>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleTonBackspace(false)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 transition cursor-pointer"
+                  >
+                    ⌫ Hapus
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev) => ({ ...prev, tonnage: '' as any }))}
+                    className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 text-xs font-bold border border-rose-800/50 transition cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                  <button
+                    key={digit}
+                    type="button"
+                    onClick={() => handleTonDigitPress(digit, false)}
+                    className="py-2 rounded-lg bg-slate-900 hover:bg-emerald-600 active:scale-95 text-white font-mono font-bold text-sm border border-slate-700 hover:border-emerald-400 transition shadow-sm cursor-pointer"
+                  >
+                    {digit}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -1097,6 +1230,19 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Ekspor Excel</span>
               </button>
+
+              {/* Hapus Semua Riwayat */}
+              {records.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteAllModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold transition cursor-pointer"
+                  title="Hapus semua data riwayat input harian"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Semua</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1322,10 +1468,10 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
             /* TAMPILAN 2: TABEL & RIWAYAT LIST VIEW */
             /* ========================================================================= */
             <div className="space-y-4">
-              {/* Filter Bar (Search + Date Range) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Filter Bar (Search + Truck Filter + Date Range) */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
                 {/* Search Input */}
-                <div className="relative sm:col-span-2">
+                <div className="relative sm:col-span-5">
                   <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
@@ -1336,8 +1482,24 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   />
                 </div>
 
+                {/* Filter Unit Truk Sesuai Armada */}
+                <div className="sm:col-span-3">
+                  <select
+                    value={filterTruck}
+                    onChange={(e) => setFilterTruck(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="ALL">Semua Truk ({dynamicTruckCodes.length} Unit)</option>
+                    {dynamicTruckCodes.map((dt) => (
+                      <option key={dt} value={dt}>
+                        {dt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Filter Date Range */}
-                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                <div className="sm:col-span-4 flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
                   {(['TODAY', '7DAYS', 'THIS_MONTH', 'ALL'] as const).map((range) => {
                     const labels: Record<string, string> = {
                       TODAY: 'Hari Ini',
@@ -1907,6 +2069,22 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   required
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold uppercase focus:outline-none focus:border-emerald-500"
                 />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {dynamicTruckCodes.map((dt) => (
+                    <button
+                      key={dt}
+                      type="button"
+                      onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
+                      className={`text-[10px] px-2 py-0.5 rounded font-mono border transition cursor-pointer ${
+                        editFormData.truckNumber.toUpperCase() === dt.toUpperCase()
+                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                      }`}
+                    >
+                      {dt}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Nama Pemuat (Multi-Select) */}
@@ -1969,14 +2147,46 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 <div>
                   <label className="block font-semibold text-slate-300 mb-1">Tonase (Ton):</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0.1"
+                    type="text"
+                    inputMode="decimal"
                     value={editFormData.tonnage}
-                    onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
+                    onChange={(e) => handleTonInputChange(e.target.value, true)}
                     required
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500 text-sm"
                   />
+                </div>
+              </div>
+              <div className="p-2 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">Pilih Angka Tonase (1-0):</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTonBackspace(true)}
+                      className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold"
+                    >
+                      ⌫
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditFormData({ ...editFormData, tonnage: '' as any })}
+                      className="px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-bold"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleTonDigitPress(digit, true)}
+                      className="py-1 rounded bg-slate-800 hover:bg-emerald-600 text-white font-mono font-bold text-xs border border-slate-700 transition cursor-pointer"
+                    >
+                      {digit}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -2065,6 +2275,47 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
               >
                 {isDeleting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 <span>Hapus Data</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE ALL CONFIRMATION MODAL */}
+      {isDeleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm">Hapus Semua Riwayat?</h3>
+                <p className="text-xs text-slate-400">Menghapus seluruh data riwayat input harian</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-800">
+              Apakah Anda yakin ingin menghapus seluruh <strong className="text-rose-400 font-mono">{records.length} data</strong> riwayat pengiriman dari database?
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllModalOpen(false)}
+                disabled={isDeletingAll}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteAll}
+                disabled={isDeletingAll}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeletingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Ya, Hapus Semua ({records.length})</span>
               </button>
             </div>
           </div>

@@ -18,6 +18,7 @@ import { UserRoleModal } from './components/UserRoleModal';
 import { DriverPortalView } from './components/DriverPortalView';
 import { PemuatPortalView } from './components/PemuatPortalView';
 import { SettingsView } from './components/SettingsView';
+import { MonthlyReportView } from './components/MonthlyReportView';
 import { findTruckFromUrlQuery, extractDriverQueryFromLocation } from './utils/driverLink';
 import {
   api,
@@ -256,12 +257,11 @@ export default function App() {
   const handleResetToDefault3Units = async () => {
     try {
       const res = await api.resetData();
-      setTrucks(res.trucks);
       setExpenses(res.expenses);
-      notify('Data cloud Firestore berhasil di-reset kembali ke 3 Unit Armada Default (Unit 01, Unit 90, Unit 03).');
+      notify('Seluruh data biaya contoh pada cloud Firestore berhasil dibersihkan.');
     } catch (err: any) {
       console.error(err);
-      notify(err.message || 'Gagal mereset data');
+      notify(err.message || 'Gagal membersihkan data');
     }
   };
 
@@ -533,6 +533,13 @@ service cloud.firestore {
             onOpenAddExpense={handleOpenAddExpense}
             onOpenDataManager={() => setIsDataManagerOpen(true)}
             onNavigateToExpenses={handleNavigateToExpensesWithCategory}
+          />
+        )}
+
+        {activeTab === 'monthly_report' && (
+          <MonthlyReportView
+            trucks={trucks}
+            expenses={expenses}
           />
         )}
 

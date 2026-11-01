@@ -1,12 +1,14 @@
 export type ExpenseCategory =
+  | 'Fuel'
+  | 'Lubricant'
   | 'Sparepart'
-  | 'Oli'
-  | 'Minyak'
-  | 'Mekanik'
-  | 'Supir'
-  | 'Tunjangan BPJS'
-  | 'Tunjangan Jamsostek'
-  | 'Potongan Mangkir';
+  | 'Tyre & Tubes'
+  | 'Workshop'
+  | 'BPJS'
+  | 'Jamsostek'
+  | 'Potongan Mangkir'
+  | 'Beras'
+  | 'Supir';
 
 export type TruckStatus = 'Aktif' | 'Perawatan' | 'Standby';
 

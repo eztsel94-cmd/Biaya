@@ -49,7 +49,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   const [formData, setFormData] = useState({
     date: todayStr,
     truckId: trucks[0]?.id || '',
-    category: 'Minyak' as ExpenseCategory,
+    category: 'Fuel' as ExpenseCategory,
     description: '',
     amount: '',
     vendor: '',
@@ -88,10 +88,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       setFormError('Jumlah biaya (Rp) harus lebih dari 0');
       return;
     }
-    if (!formData.vendor.trim()) {
-      setFormError('Nama vendor / bengkel / SPBU wajib diisi');
-      return;
-    }
 
     onAddExpense({
       date: formData.date,
@@ -99,8 +95,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       category: formData.category,
       description: formData.description.trim(),
       amount: parsedAmount,
-      vendor: formData.vendor.trim(),
-      invoiceNumber: formData.invoiceNumber.trim() || undefined,
+      vendor: '-',
     });
 
     // Reset form
@@ -356,40 +351,11 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
             </div>
           </div>
 
-          {/* Vendor / Bengkel / SPBU */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Vendor / SPBU / Bengkel *
-            </label>
-            <input
-              type="text"
-              placeholder="Contoh: SPBU 14.284.114, Toko Sparepart Riau, Bengkel Berkah"
-              value={formData.vendor}
-              onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-              required
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          {/* No. Nota / Kuitansi (Opsional) */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              No. Nota / Kuitansi (Opsional)
-            </label>
-            <input
-              type="text"
-              placeholder="Contoh: INV-2026-091 atau SPBU-129"
-              value={formData.invoiceNumber}
-              onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
-            />
-          </div>
-
           {/* Submit Button */}
-          <div className="sm:col-span-2 lg:col-span-1 flex items-end">
+          <div className="sm:col-span-2 lg:col-span-3 flex justify-end pt-1">
             <button
               type="submit"
-              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
               Simpan Catatan Biaya
@@ -472,7 +438,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
-                placeholder="Vendor, sparepart, nota..."
+                placeholder="Cari sparepart, solar, keterangan..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -580,16 +546,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                       <span className="font-mono text-slate-400">{formatDateIndo(item.date)}</span>
-                      <span>•</span>
-                      <span className="text-slate-300 truncate max-w-[150px]">{item.vendor}</span>
-                      {item.invoiceNumber && (
-                        <>
-                          <span>•</span>
-                          <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">
-                            Nota: {item.invoiceNumber}
-                          </span>
-                        </>
-                      )}
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
@@ -641,8 +597,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                     <th className="py-3 px-4 font-semibold">Unit Truk</th>
                     <th className="py-3 px-4 font-semibold">Kategori</th>
                     <th className="py-3 px-4 font-semibold">Keterangan</th>
-                    <th className="py-3 px-4 font-semibold">Vendor / Bengkel</th>
-                    <th className="py-3 px-4 font-semibold">No Nota</th>
                     <th className="py-3 px-4 font-semibold text-right">Jumlah Biaya</th>
                     <th className="py-3 px-4 font-semibold text-center">Aksi</th>
                   </tr>
@@ -672,14 +626,8 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                             {item.category}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-slate-200 min-w-[200px] max-w-xs">
+                        <td className="py-3 px-4 text-slate-200 min-w-[200px]">
                           <p className="line-clamp-2">{item.description}</p>
-                        </td>
-                        <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
-                          {item.vendor}
-                        </td>
-                        <td className="py-3 px-4 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                          {item.invoiceNumber || '-'}
                         </td>
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <span className="font-bold text-emerald-400 font-mono text-sm">
@@ -815,31 +763,6 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                   }
                   required
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Vendor / Bengkel</label>
-                <input
-                  type="text"
-                  value={editingExpense.vendor}
-                  onChange={(e) =>
-                    setEditingExpense({ ...editingExpense, vendor: e.target.value })
-                  }
-                  required
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">No. Nota / Kuitansi</label>
-                <input
-                  type="text"
-                  value={editingExpense.invoiceNumber || ''}
-                  onChange={(e) =>
-                    setEditingExpense({ ...editingExpense, invoiceNumber: e.target.value })
-                  }
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
                 />
               </div>
 

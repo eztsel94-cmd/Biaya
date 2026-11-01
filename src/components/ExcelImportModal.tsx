@@ -23,6 +23,8 @@ import {
   UserX,
   PlusCircle,
   Truck,
+  Disc,
+  Wheat,
 } from 'lucide-react';
 import { TruckUnit, ExpenseCategory, ExpenseRecord } from '../types/truck';
 import { formatRupiah, formatNumber } from '../utils/formatters';
@@ -408,22 +410,26 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   const getCategoryIcon = (cat: ExpenseCategory) => {
     switch (cat) {
-      case 'Minyak':
+      case 'Fuel':
         return <Fuel className="w-3.5 h-3.5" />;
+      case 'Lubricant':
+        return <Droplets className="w-3.5 h-3.5" />;
       case 'Sparepart':
         return <Package className="w-3.5 h-3.5" />;
-      case 'Mekanik':
+      case 'Tyre & Tubes':
+        return <Disc className="w-3.5 h-3.5" />;
+      case 'Workshop':
         return <Wrench className="w-3.5 h-3.5" />;
-      case 'Oli':
-        return <Droplets className="w-3.5 h-3.5" />;
-      case 'Supir':
-        return <UserCheck className="w-3.5 h-3.5" />;
-      case 'Tunjangan BPJS':
+      case 'BPJS':
         return <ShieldCheck className="w-3.5 h-3.5" />;
-      case 'Tunjangan Jamsostek':
+      case 'Jamsostek':
         return <HeartHandshake className="w-3.5 h-3.5" />;
       case 'Potongan Mangkir':
         return <UserX className="w-3.5 h-3.5" />;
+      case 'Beras':
+        return <Wheat className="w-3.5 h-3.5" />;
+      case 'Supir':
+        return <UserCheck className="w-3.5 h-3.5" />;
       default:
         return <Layers className="w-3.5 h-3.5" />;
     }
@@ -434,11 +440,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       {
         'Tanggal': '2026-10-28',
         'Unit Truk': 'DT 90',
-        'Kategori': 'Minyak',
+        'Kategori': 'Fuel',
         'Keterangan': 'Pengisian BioSolar 120 Liter',
         'Nominal Biaya': 816000,
-        'Vendor': 'SPBU Pasir Pengaraian',
-        'No Invoice': 'SPBU-2810',
+      },
+      {
+        'Tanggal': '2026-10-28',
+        'Unit Truk': 'DT 90',
+        'Kategori': 'Lubricant',
+        'Keterangan': 'Ganti Oli Mesin Meditran SX4 10 Liter',
+        'Nominal Biaya': 580000,
       },
       {
         'Tanggal': '2026-10-28',
@@ -446,44 +457,48 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'Kategori': 'Sparepart',
         'Keterangan': 'Beli kampas rem depan Bendix HD',
         'Nominal Biaya': 450000,
-        'Vendor': 'Toko Sparepart Mandiri',
-        'No Invoice': 'INV-4412',
       },
       {
         'Tanggal': '2026-10-28',
         'Unit Truk': 'DT 90',
-        'Kategori': 'Mekanik',
+        'Kategori': 'Tyre & Tubes',
+        'Keterangan': 'Ganti ban luar & ban dalam',
+        'Nominal Biaya': 1950000,
+      },
+      {
+        'Tanggal': '2026-10-28',
+        'Unit Truk': 'DT 90',
+        'Kategori': 'Workshop',
         'Keterangan': 'Jasa pasang kampas rem & las engsel bak',
         'Nominal Biaya': 200000,
-        'Vendor': 'Bengkel Servis Berkah Truk',
-        'No Invoice': 'BSB-1028',
       },
       {
         'Tanggal': '2026-10-28',
         'Unit Truk': 'DT 90',
-        'Kategori': 'Tunjangan BPJS',
-        'Keterangan': 'Tunjangan Iuran BPJS Ketenagakerjaan Supir',
+        'Kategori': 'BPJS',
+        'Keterangan': 'Iuran BPJS Ketenagakerjaan',
         'Nominal Biaya': 175000,
-        'Vendor': 'BPJS Ketenagakerjaan KC Rokan Hulu',
-        'No Invoice': 'BPJS-1028-90',
       },
       {
         'Tanggal': '2026-10-28',
         'Unit Truk': 'DT 90',
-        'Kategori': 'Tunjangan Jamsostek',
-        'Keterangan': 'Tunjangan Premi Asuransi Jamsostek Supir',
+        'Kategori': 'Jamsostek',
+        'Keterangan': 'Premi Asuransi Jamsostek',
         'Nominal Biaya': 150000,
-        'Vendor': 'Jamsostek Tenaga Kerja Sawit',
-        'No Invoice': 'JAM-1028',
       },
       {
         'Tanggal': '2026-10-28',
         'Unit Truk': 'DT 90',
         'Kategori': 'Potongan Mangkir',
-        'Keterangan': 'Potongan mangkir supir 1 hari kerja',
+        'Keterangan': 'Potongan mangkir 1 hari kerja',
         'Nominal Biaya': 125000,
-        'Vendor': 'Kasir / Bagian Personalia',
-        'No Invoice': 'POT-MGK-28',
+      },
+      {
+        'Tanggal': '2026-10-28',
+        'Unit Truk': 'DT 90',
+        'Kategori': 'Beras',
+        'Keterangan': 'Catu beras bulanan',
+        'Nominal Biaya': 250000,
       },
       {
         'Tanggal': '2026-10-28',
@@ -491,17 +506,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         'Kategori': 'Supir',
         'Keterangan': 'Upah ritase supir afdeling 2',
         'Nominal Biaya': 450000,
-        'Vendor': 'Kasbon Kasir Kebun',
-        'No Invoice': 'UPH-2810-90',
-      },
-      {
-        'Tanggal': '2026-10-28',
-        'Unit Truk': 'Unit 01',
-        'Kategori': 'Oli',
-        'Keterangan': 'Ganti Oli Mesin Meditran SX4 10 Liter',
-        'Nominal Biaya': 580000,
-        'Vendor': 'Toko Oli Nusantara',
-        'No Invoice': 'TOPN-9012',
       },
     ];
 
@@ -526,11 +530,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   Tempel Catatan & Pilah Data Otomatis
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  Auto-Detect DT 90 & Kategori
+                  Auto-Detect DT & Kategori
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Tempel tulisan bebas, catatan WA, atau tabel Excel. Sistem otomatis memilah nomor DT (misal: DT 90), nominal biaya, dan kategori (Solar, Sparepart, Mekanik, Oli, Supir, Tunjangan BPJS, Tunjangan Jamsostek, Potongan Mangkir).
+                Tempel tulisan bebas, catatan WA, atau tabel Excel. Sistem otomatis memilah nomor DT, nominal biaya, dan kategori (Fuel, Lubricant, Sparepart, Tyre & Tubes, Workshop, BPJS, Jamsostek, Potongan Mangkir, Beras, Supir).
               </p>
             </div>
           </div>

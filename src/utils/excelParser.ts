@@ -34,13 +34,13 @@ export interface UnitCostBreakdown {
 
 /**
  * Intelligent categorization based on keywords in text
- * Supports categories: Sparepart, Oli, Minyak, Mekanik, Supir, Tunjangan BPJS, Tunjangan Jamsostek, Potongan Mangkir
+ * Supports 10 categories: Fuel, Lubricant, Sparepart, Tyre & Tubes, Workshop, BPJS, Jamsostek, Potongan Mangkir, Beras, Supir
  */
 export function detectCategory(text: string): ExpenseCategory {
   if (!text) return 'Sparepart';
   const lower = text.toLowerCase().trim();
 
-  // 1. Tunjangan BPJS (Ketenagakerjaan / Kesehatan)
+  // 1. BPJS (Ketenagakerjaan / Kesehatan)
   if (
     lower.includes('tunjangan bpjs') ||
     lower.includes('bpjs') ||
@@ -51,10 +51,10 @@ export function detectCategory(text: string): ExpenseCategory {
     lower.includes('iuran bpjs') ||
     lower.includes('premi bpjs')
   ) {
-    return 'Tunjangan BPJS';
+    return 'BPJS';
   }
 
-  // 2. Tunjangan Jamsostek (Asuransi Tenaga Kerja Supir)
+  // 2. Jamsostek (Asuransi Tenaga Kerja)
   if (
     lower.includes('tunjangan jamsostek') ||
     lower.includes('jamsostek') ||
@@ -65,9 +65,10 @@ export function detectCategory(text: string): ExpenseCategory {
     lower.includes('asuransi sopir') ||
     lower.includes('jaminan sosial') ||
     lower.includes('jkk') ||
-    lower.includes('jkm')
+    lower.includes('jkm') ||
+    lower.includes('jht')
   ) {
-    return 'Tunjangan Jamsostek';
+    return 'Jamsostek';
   }
 
   // 3. Potongan Mangkir (Denda / Absensi / Tidak Hadir)
@@ -86,8 +87,21 @@ export function detectCategory(text: string): ExpenseCategory {
     return 'Potongan Mangkir';
   }
 
-  // 4. Minyak / BBM / Solar
+  // 4. Beras (Catu Beras / Tunjangan Beras)
   if (
+    lower.includes('beras') ||
+    lower.includes('catu beras') ||
+    lower.includes('tunjangan beras') ||
+    lower.includes('jatah beras') ||
+    lower.includes('kupon beras') ||
+    lower.includes('sembako beras')
+  ) {
+    return 'Beras';
+  }
+
+  // 5. Fuel (BBM / Solar / Minyak)
+  if (
+    lower.includes('fuel') ||
     lower.includes('solar') ||
     lower.includes('biosolar') ||
     lower.includes('bio solar') ||
@@ -95,18 +109,18 @@ export function detectCategory(text: string): ExpenseCategory {
     lower.includes('bbm') ||
     lower.includes('minyak') ||
     lower.includes('bensin') ||
-    lower.includes('fuel') ||
     lower.includes('pertalite') ||
     lower.includes('pertamax') ||
     lower.includes('spbu') ||
     lower.includes('tangki bbm') ||
     /\b(\d+)\s*(liter|ltr|lt)\b/i.test(lower)
   ) {
-    return 'Minyak';
+    return 'Fuel';
   }
 
-  // 5. Oli & Pelumas
+  // 6. Lubricant (Oli & Pelumas)
   if (
+    lower.includes('lubricant') ||
     lower.includes('oli') ||
     lower.includes('pelumas') ||
     lower.includes('oil') ||
@@ -121,16 +135,36 @@ export function detectCategory(text: string): ExpenseCategory {
     lower.includes('sae 40') ||
     lower.includes('sae 90') ||
     lower.includes('sae 15w') ||
-    lower.includes('filter oli') ||
     lower.includes('oli mesin') ||
     lower.includes('oli gardan') ||
     lower.includes('oli persneling') ||
     lower.includes('oli transmisi')
   ) {
-    return 'Oli';
+    return 'Lubricant';
   }
 
-  // 6. Supir / Uang Jalan / Gaji / Ritase
+  // 7. Tyre & Tubes (Ban Luar / Ban Dalam / Flap / Vulkanisir)
+  if (
+    lower.includes('tyre') ||
+    lower.includes('tire') ||
+    lower.includes('tubes') ||
+    lower.includes('tube') ||
+    lower.includes('ban luar') ||
+    lower.includes('ban dalam') ||
+    lower.includes('lidah ban') ||
+    lower.includes('flap ban') ||
+    lower.includes('tambal ban') ||
+    lower.includes('vulkanisir') ||
+    lower.includes('bridgestone') ||
+    lower.includes('gajah tunggal') ||
+    lower.includes('dunlop') ||
+    lower.includes('swallow') ||
+    /\bban\b/i.test(lower)
+  ) {
+    return 'Tyre & Tubes';
+  }
+
+  // 8. Supir / Uang Jalan / Gaji / Ritase
   if (
     lower.includes('supir') ||
     lower.includes('sopir') ||
@@ -151,8 +185,9 @@ export function detectCategory(text: string): ExpenseCategory {
     return 'Supir';
   }
 
-  // 7. Mekanik / Bengkel / Jasa / Servis / Las
+  // 9. Workshop / Mekanik / Bengkel / Jasa / Servis / Las
   if (
+    lower.includes('workshop') ||
     lower.includes('mekanik') ||
     lower.includes('bengkel') ||
     lower.includes('servis') ||
@@ -175,44 +210,10 @@ export function detectCategory(text: string): ExpenseCategory {
     lower.includes('turun mesin') ||
     lower.includes('jasa')
   ) {
-    return 'Mekanik';
+    return 'Workshop';
   }
 
-  // 5. Sparepart / Suku Cadang
-  if (
-    lower.includes('sparepart') ||
-    lower.includes('spare part') ||
-    lower.includes('sperpart') ||
-    lower.includes('onderdil') ||
-    lower.includes('ban') ||
-    lower.includes('per daun') ||
-    lower.includes('per') ||
-    lower.includes('kampas') ||
-    lower.includes('kanvas') ||
-    lower.includes('rem') ||
-    lower.includes('aki') ||
-    lower.includes('accu') ||
-    lower.includes('bearing') ||
-    lower.includes('klaher') ||
-    lower.includes('baut') ||
-    lower.includes('u-bolt') ||
-    lower.includes('filter') ||
-    lower.includes('tali kipas') ||
-    lower.includes('fan belt') ||
-    lower.includes('alternator') ||
-    lower.includes('wiper') ||
-    lower.includes('bohlam') ||
-    lower.includes('lampu') ||
-    lower.includes('shock') ||
-    lower.includes('bushing') ||
-    lower.includes('seal') ||
-    lower.includes('spion') ||
-    lower.includes('velg')
-  ) {
-    return 'Sparepart';
-  }
-
-  // Default fallback
+  // 10. Sparepart / Suku Cadang (dan default fallback)
   return 'Sparepart';
 }
 
@@ -659,22 +660,26 @@ function cleanExpenseDescription(line: string, category: ExpenseCategory): strin
 
   if (!cleaned || cleaned.length < 3) {
     switch (category) {
-      case 'Minyak':
-        return 'Pengisian BioSolar TBS';
+      case 'Fuel':
+        return 'Pengisian Fuel / BioSolar TBS';
+      case 'Lubricant':
+        return 'Penggantian Lubricant (Oli & Pelumas)';
       case 'Sparepart':
         return 'Penggantian Sparepart Unit';
-      case 'Mekanik':
-        return 'Jasa Servis & Mekanik';
-      case 'Oli':
-        return 'Penggantian Oli & Pelumas';
-      case 'Supir':
-        return 'Upah Ritase & Uang Jalan Supir';
-      case 'Tunjangan BPJS':
-        return 'Tunjangan BPJS Ketenagakerjaan / Kesehatan';
-      case 'Tunjangan Jamsostek':
-        return 'Tunjangan Premi Asuransi Jamsostek Supir';
+      case 'Tyre & Tubes':
+        return 'Penggantian Ban Luar / Ban Dalam (Tyre & Tubes)';
+      case 'Workshop':
+        return 'Jasa Servis & Workshop Mekanik';
+      case 'BPJS':
+        return 'Iuran BPJS Ketenagakerjaan / Kesehatan';
+      case 'Jamsostek':
+        return 'Premi Asuransi Jamsostek';
       case 'Potongan Mangkir':
-        return 'Potongan Mangkir / Absensi Supir';
+        return 'Potongan Mangkir / Absensi';
+      case 'Beras':
+        return 'Tunjangan / Catu Beras';
+      case 'Supir':
+        return 'Upah Ritase & Operasional Supir';
       default:
         return 'Biaya Operasional Truk TBS';
     }
@@ -704,23 +709,27 @@ function extractVendorFromText(line: string, category: ExpenseCategory): string 
   }
 
   switch (category) {
-    case 'Minyak':
-      return 'SPBU Mitra Kebun TBS';
-    case 'Oli':
-      return 'Toko Oli & Pelumas Nusantara';
-    case 'Mekanik':
-      return 'Bengkel Servis Berkah Truk';
-    case 'Supir':
-      return 'Kasbon Operasional Kasir Kebun';
-    case 'Tunjangan BPJS':
-      return 'BPJS Ketenagakerjaan KC Rokan Hulu';
-    case 'Tunjangan Jamsostek':
-      return 'Jamsostek Tenaga Kerja Sawit';
+    case 'Fuel':
+      return 'SPBU / Gudang BBM';
+    case 'Lubricant':
+      return 'Gudang Oli & Pelumas';
+    case 'Tyre & Tubes':
+      return 'Gudang Ban & Vulkanisir';
+    case 'Workshop':
+      return 'Workshop / Bengkel Traksi';
+    case 'BPJS':
+      return 'BPJS Ketenagakerjaan';
+    case 'Jamsostek':
+      return 'Jamsostek';
     case 'Potongan Mangkir':
-      return 'Bagian Personalia & Kasir Kebun';
+      return 'Bagian Personalia & Kasir';
+    case 'Beras':
+      return 'Logistik / Gudang Beras';
+    case 'Supir':
+      return 'Kasir Operasional Kebun';
     case 'Sparepart':
     default:
-      return 'Toko Sparepart Mitra Mandiri';
+      return 'Gudang Sparepart Traksi';
   }
 }
 

@@ -32,6 +32,8 @@ import {
   HeartHandshake,
   UserX,
   QrCode,
+  Disc,
+  Wheat,
 } from 'lucide-react';
 import { DriverQrCodeModal } from './DriverQrCodeModal';
 
@@ -76,22 +78,26 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
 
   const getCategoryIcon = (cat: ExpenseCategory) => {
     switch (cat) {
+      case 'Fuel':
+        return <Fuel className="w-3.5 h-3.5" />;
+      case 'Lubricant':
+        return <Droplets className="w-3.5 h-3.5" />;
       case 'Sparepart':
         return <Package className="w-3.5 h-3.5" />;
-      case 'Oli':
-        return <Droplets className="w-3.5 h-3.5" />;
-      case 'Minyak':
-        return <Fuel className="w-3.5 h-3.5" />;
-      case 'Mekanik':
+      case 'Tyre & Tubes':
+        return <Disc className="w-3.5 h-3.5" />;
+      case 'Workshop':
         return <Wrench className="w-3.5 h-3.5" />;
-      case 'Supir':
-        return <UserCheck className="w-3.5 h-3.5" />;
-      case 'Tunjangan BPJS':
+      case 'BPJS':
         return <ShieldCheck className="w-3.5 h-3.5" />;
-      case 'Tunjangan Jamsostek':
+      case 'Jamsostek':
         return <HeartHandshake className="w-3.5 h-3.5" />;
       case 'Potongan Mangkir':
         return <UserX className="w-3.5 h-3.5" />;
+      case 'Beras':
+        return <Wheat className="w-3.5 h-3.5" />;
+      case 'Supir':
+        return <UserCheck className="w-3.5 h-3.5" />;
       default:
         return <Layers className="w-3.5 h-3.5" />;
     }

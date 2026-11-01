@@ -36,6 +36,7 @@ import {
   addDailyRecord,
   updateDailyRecord,
   deleteDailyRecord,
+  deleteAllDailyRecords,
   subscribeToFirestorePemuat,
   addPemuatFirestore,
   deletePemuatFirestore,
@@ -46,7 +47,7 @@ import { SharePemuatModal } from './SharePemuatModal';
 import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl } from '../utils/driverLink';
 
-const QUICK_TRUCKS = ['DT 90', 'DT 01', 'DT 02', 'DT 03', 'DT 05', 'DT 08', 'DT 10', 'DT 12'];
+const QUICK_TRUCKS: string[] = [];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
 
 interface DailyRecordsViewProps {
@@ -86,12 +87,24 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
   const todayStr = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState<NewDailyRecord>({
     date: todayStr,
-    truckNumber: 'DT 90',
+    truckNumber: trucks.length > 0 ? trucks[0].code : '',
     driverName: '',
     tonnage: '' as any,
     afdeling: 'Afdeling 1',
     notes: '',
   });
+
+  // Sinkronkan pilihan awal Nomor Unit Truk dengan Armada yang terdata
+  useEffect(() => {
+    if (dynamicTruckCodes.length > 0) {
+      setFormData((prev) => {
+        if (!prev.truckNumber || (!dynamicTruckCodes.includes(prev.truckNumber) && prev.truckNumber === 'DT 90')) {
+          return { ...prev, truckNumber: dynamicTruckCodes[0] };
+        }
+        return prev;
+      });
+    }
+  }, [dynamicTruckCodes]);
 
   // Multi-Select Nama Pemuat: parsing helper (pemisah garis miring /)
   const selectedPemuatList = useMemo(() => {
@@ -157,6 +170,56 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
   // Delete modal state
   const [recordToDelete, setRecordToDelete] = useState<DailyRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState<boolean>(false);
+  const [isDeletingAll, setIsDeletingAll] = useState<boolean>(false);
+
+  // Helper format angka tonase otomatis (contoh tekan 6, 7, 9 -> 6,79)
+  const formatTonDigits = (digits: string): string => {
+    const clean = digits.replace(/\D/g, '').slice(0, 3);
+    if (!clean) return '';
+    if (clean.length === 1) return clean;
+    return `${clean[0]},${clean.slice(1)}`;
+  };
+
+  const handleTonDigitPress = (digit: string, isEdit = false) => {
+    if (isEdit) {
+      if (!editFormData) return;
+      const currentDigits = String(editFormData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.length >= 3 ? digit : currentDigits + digit;
+      setEditFormData({ ...editFormData, tonnage: formatTonDigits(nextDigits) as any });
+    } else {
+      const currentDigits = String(formData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.length >= 3 ? digit : currentDigits + digit;
+      setFormData({ ...formData, tonnage: formatTonDigits(nextDigits) as any });
+    }
+  };
+
+  const handleTonBackspace = (isEdit = false) => {
+    if (isEdit) {
+      if (!editFormData) return;
+      const currentDigits = String(editFormData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.slice(0, -1);
+      setEditFormData({ ...editFormData, tonnage: formatTonDigits(nextDigits) as any });
+    } else {
+      const currentDigits = String(formData.tonnage ?? '').replace(/\D/g, '');
+      const nextDigits = currentDigits.slice(0, -1);
+      setFormData({ ...formData, tonnage: formatTonDigits(nextDigits) as any });
+    }
+  };
+
+  const handleTonInputChange = (rawVal: string, isEdit = false) => {
+    // Jika pengguna mengetik angka murni tanpa koma/titik (misal 679), otomatis ubah jadi 6,79
+    let formatted = rawVal;
+    if (/^\d{2,3}$/.test(rawVal)) {
+      formatted = `${rawVal[0]},${rawVal.slice(1)}`;
+    }
+    if (isEdit) {
+      if (!editFormData) return;
+      setEditFormData({ ...editFormData, tonnage: formatted as any });
+    } else {
+      setFormData({ ...formData, tonnage: formatted as any });
+    }
+  };
 
   // Share link pemuat modal state
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
@@ -205,9 +268,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast('Mohon pilih atau masukkan Nama Pemuat (bisa lebih dari satu, contoh: ANTON/DELFIN/YUVEN)', 'error');
       return;
     }
-    const ton = parseFloat(String(formData.tonnage));
+    const ton = parseFloat(String(formData.tonnage).replace(',', '.'));
     if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 8.5)', 'error');
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
       return;
     }
 
@@ -259,9 +322,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast('Mohon masukkan Nama Pemuat (contoh: Anton)', 'error');
       return;
     }
-    const ton = parseFloat(String(editFormData.tonnage));
+    const ton = parseFloat(String(editFormData.tonnage).replace(',', '.'));
     if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 8.5)', 'error');
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
       return;
     }
 
@@ -300,6 +363,23 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast(`Gagal menghapus data: ${err.message}`, 'error');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Handle Hapus Semua Riwayat Input Data Harian
+  const confirmDeleteAll = async () => {
+    if (records.length === 0) return;
+    setIsDeletingAll(true);
+    try {
+      const targetIds = records.map((r) => r.id);
+      const count = await deleteAllDailyRecords(targetIds);
+      showToast(`Berhasil menghapus semua (${count}) data riwayat input harian!`, 'info');
+      setIsDeleteAllModalOpen(false);
+    } catch (err: any) {
+      console.error('Error deleteAllDailyRecords:', err);
+      showToast(`Gagal menghapus semua data: ${err.message}`, 'error');
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -844,19 +924,24 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
               {/* Tonase (Ton) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                  Tonase (Tonase dalam Ton)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                    Tonase (Tonase dalam Ton)
+                  </label>
+                  {formData.tonnage && (
+                    <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                      Tercatat: {String(formData.tonnage).replace('.', ',')} Ton
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0.1"
-                    max="50"
-                    placeholder="Contoh: 8.75"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Contoh: 6,79"
                     value={formData.tonnage}
-                    onChange={(e) => setFormData({ ...formData, tonnage: e.target.value as any })}
+                    onChange={(e) => handleTonInputChange(e.target.value, false)}
                     required
                     className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
                   />
@@ -864,17 +949,44 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     TON
                   </div>
                 </div>
-                <div className="flex gap-1.5 mt-2">
-                  {[7.5, 8.0, 8.5, 9.0, 9.5].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, tonnage: preset as any })}
-                      className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/60 font-mono cursor-pointer"
-                    >
-                      {preset}T
-                    </button>
-                  ))}
+
+                {/* Tombol Angka Cepat Tonase 1 - 0 (Tekan 6, 7, 9 -> Otomatis 6,79 Ton) */}
+                <div className="mt-2.5 p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-400">
+                      Pilih Angka Tonase (Contoh tekan <strong className="text-emerald-400">6</strong>, <strong className="text-emerald-400">7</strong>, <strong className="text-emerald-400">9</strong> &rarr; <strong className="text-white">6,79</strong> ton):
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleTonBackspace(false)}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-700 transition cursor-pointer"
+                        title="Hapus 1 angka terakhir"
+                      >
+                        ⌫ Hapus
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, tonnage: '' as any })}
+                        className="px-2 py-0.5 rounded bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 text-[11px] font-bold border border-rose-800/50 transition cursor-pointer"
+                        title="Bersihkan kolom tonase"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                      <button
+                        key={digit}
+                        type="button"
+                        onClick={() => handleTonDigitPress(digit, false)}
+                        className="py-2 rounded-lg bg-slate-800 hover:bg-emerald-600 active:scale-95 text-white font-mono font-bold text-sm border border-slate-700 hover:border-emerald-400 transition shadow-sm cursor-pointer"
+                      >
+                        {digit}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -992,48 +1104,62 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   </p>
                 </div>
 
-                {/* Filter Periode */}
-                <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
-                  <button
-                    onClick={() => setFilterDateRange('ALL')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      filterDateRange === 'ALL'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Semua
-                  </button>
-                  <button
-                    onClick={() => setFilterDateRange('TODAY')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      filterDateRange === 'TODAY'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Hari Ini
-                  </button>
-                  <button
-                    onClick={() => setFilterDateRange('7DAYS')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      filterDateRange === '7DAYS'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    7 Hari
-                  </button>
-                  <button
-                    onClick={() => setFilterDateRange('THIS_MONTH')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      filterDateRange === 'THIS_MONTH'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Bulan Ini
-                  </button>
+                {/* Filter Periode & Hapus Semua */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+                    <button
+                      onClick={() => setFilterDateRange('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        filterDateRange === 'ALL'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Semua
+                    </button>
+                    <button
+                      onClick={() => setFilterDateRange('TODAY')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        filterDateRange === 'TODAY'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Hari Ini
+                    </button>
+                    <button
+                      onClick={() => setFilterDateRange('7DAYS')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        filterDateRange === '7DAYS'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      7 Hari
+                    </button>
+                    <button
+                      onClick={() => setFilterDateRange('THIS_MONTH')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                        filterDateRange === 'THIS_MONTH'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Bulan Ini
+                    </button>
+                  </div>
+
+                  {records.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDeleteAllModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold transition cursor-pointer shadow-sm"
+                      title="Hapus semua data riwayat input harian"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus Semua</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1064,8 +1190,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     onChange={(e) => setFilterTruck(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:outline-none focus:border-emerald-500 transition"
                   >
-                    <option value="ALL">Semua Truk</option>
-                    {QUICK_TRUCKS.map((dt) => (
+                    <option value="ALL">Semua Truk ({dynamicTruckCodes.length} Unit)</option>
+                    {dynamicTruckCodes.map((dt) => (
                       <option key={dt} value={dt}>
                         {dt}
                       </option>
@@ -1364,13 +1490,13 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-semibold text-sm focus:outline-none focus:border-emerald-500 transition"
                 />
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {QUICK_TRUCKS.map((dt) => (
+                  {dynamicTruckCodes.map((dt) => (
                     <button
                       key={dt}
                       type="button"
                       onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
                       className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium transition border cursor-pointer ${
-                        editFormData.truckNumber.toUpperCase() === dt
+                        editFormData.truckNumber.toUpperCase() === dt.toUpperCase()
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
                           : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
                       }`}
@@ -1457,17 +1583,48 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   </label>
                   <div className="relative">
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0.1"
-                      max="50"
+                      type="text"
+                      inputMode="decimal"
                       value={editFormData.tonnage}
-                      onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
+                      onChange={(e) => handleTonInputChange(e.target.value, true)}
                       required
                       className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
                       TON
+                    </div>
+                  </div>
+                  <div className="mt-2 p-2 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">Pilih Angka (1-0):</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleTonBackspace(true)}
+                          className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold"
+                        >
+                          ⌫
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditFormData({ ...editFormData, tonnage: '' as any })}
+                          className="px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-bold"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1">
+                      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                        <button
+                          key={digit}
+                          type="button"
+                          onClick={() => handleTonDigitPress(digit, true)}
+                          className="py-1.5 rounded bg-slate-800 hover:bg-emerald-600 text-white font-mono font-bold text-xs border border-slate-700 transition cursor-pointer"
+                        >
+                          {digit}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1618,6 +1775,61 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Hapus Sekarang</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Hapus Semua Riwayat Input Data Harian */}
+      {isDeleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Hapus Semua Data Riwayat?</h3>
+                <p className="text-xs text-slate-400">Tindakan ini akan menghapus seluruh riwayat input harian</p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/30 text-xs text-slate-200 space-y-1.5">
+              <p>
+                Anda akan menghapus seluruh <strong className="text-rose-400 font-mono">{records.length} data</strong> riwayat input harian secara permanen dari database.
+              </p>
+              <p className="text-slate-400">
+                Pastikan Anda sudah mengunduh laporan Excel jika data masih diperlukan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllModalOpen(false)}
+                disabled={isDeletingAll}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteAll}
+                disabled={isDeletingAll}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold transition shadow-lg shadow-rose-950/40 cursor-pointer"
+              >
+                {isDeletingAll ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menghapus Semua...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Ya, Hapus Semua ({records.length} Data)</span>
                   </>
                 )}
               </button>

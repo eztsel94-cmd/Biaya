@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory } from '../types/truck';
 import { CATEGORIES } from '../data/initialData';
-import { PlusCircle, X, Check, AlertCircle } from 'lucide-react';
+import { PlusCircle, X, AlertCircle } from 'lucide-react';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -22,11 +22,9 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   const [date, setDate] = useState(todayStr);
   const [truckId, setTruckId] = useState('');
-  const [category, setCategory] = useState<ExpenseCategory>('Minyak');
+  const [category, setCategory] = useState<ExpenseCategory>('Fuel');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [vendor, setVendor] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,8 +33,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       setTruckId(defaultTruckId || (trucks[0]?.id ?? ''));
       setDescription('');
       setAmount('');
-      setVendor('');
-      setInvoiceNumber('');
       setError(null);
     }
   }, [isOpen, defaultTruckId, trucks]);
@@ -59,10 +55,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       setError('Jumlah nominal biaya (Rp) harus lebih dari 0.');
       return;
     }
-    if (!vendor.trim()) {
-      setError('Nama vendor / bengkel / SPBU wajib diisi.');
-      return;
-    }
 
     onAddExpense({
       date,
@@ -70,8 +62,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       category,
       description: description.trim(),
       amount: parsedAmount,
-      vendor: vendor.trim(),
-      invoiceNumber: invoiceNumber.trim() || undefined,
+      vendor: '-',
     });
 
     onClose();
@@ -171,31 +162,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
               required
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">Vendor / Bengkel / SPBU *</label>
-              <input
-                type="text"
-                placeholder="Nama penyedia jasa/toko"
-                value={vendor}
-                onChange={(e) => setVendor(e.target.value)}
-                required
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">No Nota / Kuitansi</label>
-              <input
-                type="text"
-                placeholder="Opsional (SPBU-091)"
-                value={invoiceNumber}
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono"
-              />
-            </div>
           </div>
 
           <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">

@@ -33,8 +33,27 @@ import {
   UserX,
   Layers,
   QrCode,
+  ChevronLeft,
+  RotateCcw,
+  Disc,
+  Wheat,
 } from 'lucide-react';
 import { DriverQrCodeModal } from './DriverQrCodeModal';
+
+const INDO_MONTHS = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
 
 interface DriverPortalViewProps {
   truck: TruckUnit;
@@ -52,6 +71,8 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   onExitDriverMode,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>('all'); // 'all' or '0'..'11'
+  const [selectedYear, setSelectedYear] = useState<string>('all'); // 'all' or '2026', '2025', etc.
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
@@ -64,10 +85,40 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
     return expenses.filter((e) => e.truckId === truck.id);
   }, [expenses, truck.id]);
 
-  // Total and category metrics for THIS TRUCK ONLY
+  // Available years dynamically from unitExpenses + standard recent years
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const yearSet = new Set<number>([currentYear, currentYear - 1, currentYear - 2, currentYear - 3]);
+    unitExpenses.forEach((e) => {
+      const y = new Date(e.date).getFullYear();
+      if (!isNaN(y) && y > 2000) yearSet.add(y);
+    });
+    return Array.from(yearSet).sort((a, b) => b - a);
+  }, [unitExpenses]);
+
+  // Expenses filtered by selected Bulan & Tahun
+  const periodExpenses = useMemo(() => {
+    return unitExpenses.filter((e) => {
+      const d = new Date(e.date);
+      if (selectedYear !== 'all' && d.getFullYear() !== Number(selectedYear)) {
+        return false;
+      }
+      if (selectedMonth !== 'all' && d.getMonth() !== Number(selectedMonth)) {
+        return false;
+      }
+      return true;
+    });
+  }, [unitExpenses, selectedMonth, selectedYear]);
+
+  // Total all-time cost for THIS TRUCK ONLY
   const totalUnitCost = useMemo(() => {
     return unitExpenses.reduce((sum, e) => sum + e.amount, 0);
   }, [unitExpenses]);
+
+  // Total cost for selected Bulan & Tahun period
+  const periodUnitCost = useMemo(() => {
+    return periodExpenses.reduce((sum, e) => sum + e.amount, 0);
+  }, [periodExpenses]);
 
   // Current month cost for this truck
   const currentMonthCost = useMemo(() => {
@@ -82,32 +133,58 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
       .reduce((sum, e) => sum + e.amount, 0);
   }, [unitExpenses]);
 
-  // Category totals for this truck
+  // Category totals for this truck (respecting Bulan & Tahun filter)
   const categorySums = useMemo(() => {
     return CATEGORIES.reduce((acc, cat) => {
-      acc[cat] = unitExpenses
+      acc[cat] = periodExpenses
         .filter((e) => e.category === cat)
         .reduce((sum, e) => sum + e.amount, 0);
       return acc;
     }, {} as Record<ExpenseCategory, number>);
-  }, [unitExpenses]);
+  }, [periodExpenses]);
 
   // Filtered expenses list
   const filteredExpenses = useMemo(() => {
-    return unitExpenses
+    return periodExpenses
       .filter((e) => {
         if (selectedCategory !== 'all' && e.category !== selectedCategory) return false;
         if (searchTerm) {
           const s = searchTerm.toLowerCase();
           const matchDesc = e.description?.toLowerCase().includes(s);
-          const matchVendor = e.vendor?.toLowerCase().includes(s);
-          const matchInvoice = e.invoiceNumber?.toLowerCase().includes(s);
-          if (!matchDesc && !matchVendor && !matchInvoice) return false;
+          const matchCat = e.category?.toLowerCase().includes(s);
+          if (!matchDesc && !matchCat) return false;
         }
         return true;
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [unitExpenses, selectedCategory, searchTerm]);
+  }, [periodExpenses, selectedCategory, searchTerm]);
+
+  const periodLabel = useMemo(() => {
+    if (selectedMonth === 'all' && selectedYear === 'all') return 'Semua Periode';
+    if (selectedMonth !== 'all' && selectedYear !== 'all') {
+      return `${INDO_MONTHS[Number(selectedMonth)]} ${selectedYear}`;
+    }
+    if (selectedMonth !== 'all') {
+      return `Bulan ${INDO_MONTHS[Number(selectedMonth)]} (Semua Tahun)`;
+    }
+    return `Tahun ${selectedYear}`;
+  }, [selectedMonth, selectedYear]);
+
+  const handleStepMonth = (delta: number) => {
+    const now = new Date();
+    let m = selectedMonth === 'all' ? now.getMonth() : Number(selectedMonth);
+    let y = selectedYear === 'all' ? now.getFullYear() : Number(selectedYear);
+    m += delta;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    } else if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    setSelectedMonth(String(m));
+    setSelectedYear(String(y));
+  };
 
   const driverUrl = getDriverPortalUrl(truck);
   const waUrl = getWhatsAppShareUrl(truck, driverUrl);
@@ -134,22 +211,26 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
 
   const getCategoryIcon = (cat: ExpenseCategory) => {
     switch (cat) {
+      case 'Fuel':
+        return <Fuel className="w-3.5 h-3.5" />;
+      case 'Lubricant':
+        return <Droplets className="w-3.5 h-3.5" />;
       case 'Sparepart':
         return <Package className="w-3.5 h-3.5" />;
-      case 'Oli':
-        return <Droplets className="w-3.5 h-3.5" />;
-      case 'Minyak':
-        return <Fuel className="w-3.5 h-3.5" />;
-      case 'Mekanik':
+      case 'Tyre & Tubes':
+        return <Disc className="w-3.5 h-3.5" />;
+      case 'Workshop':
         return <Wrench className="w-3.5 h-3.5" />;
-      case 'Supir':
-        return <UserCheck className="w-3.5 h-3.5" />;
-      case 'Tunjangan BPJS':
+      case 'BPJS':
         return <ShieldCheck className="w-3.5 h-3.5" />;
-      case 'Tunjangan Jamsostek':
+      case 'Jamsostek':
         return <HeartHandshake className="w-3.5 h-3.5" />;
       case 'Potongan Mangkir':
         return <UserX className="w-3.5 h-3.5" />;
+      case 'Beras':
+        return <Wheat className="w-3.5 h-3.5" />;
+      case 'Supir':
+        return <UserCheck className="w-3.5 h-3.5" />;
       default:
         return <Layers className="w-3.5 h-3.5" />;
     }
@@ -283,24 +364,130 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
               <p className="text-sm font-bold text-white mt-0.5 truncate">{truck.driverName}</p>
               {truck.phone && <p className="text-[11px] text-slate-400">{truck.phone}</p>}
             </div>
-            <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-800">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Biaya Unit</span>
+            <div className="bg-slate-800/40 p-3 rounded-xl border border-emerald-500/30">
+              <span className="text-[10px] uppercase font-bold text-emerald-400 block truncate">
+                Biaya ({periodLabel})
+              </span>
               <p className="text-sm sm:text-base font-extrabold text-emerald-400 font-mono mt-0.5">
+                {formatRupiah(periodUnitCost)}
+              </p>
+              <p className="text-[10px] text-slate-400">{periodExpenses.length} transaksi di periode ini</p>
+            </div>
+            <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-800">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Semua Waktu</span>
+              <p className="text-sm sm:text-base font-extrabold text-white font-mono mt-0.5">
                 {formatRupiah(totalUnitCost)}
               </p>
-              <p className="text-[10px] text-slate-400">{unitExpenses.length} transaksi tercatat</p>
+              <p className="text-[10px] text-slate-400">{unitExpenses.length} total transaksi</p>
             </div>
             <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-800">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Biaya Bulan Ini</span>
-              <p className="text-sm sm:text-base font-extrabold text-white font-mono mt-0.5">
+              <p className="text-sm sm:text-base font-extrabold text-sky-400 font-mono mt-0.5">
                 {formatRupiah(currentMonthCost)}
               </p>
               <p className="text-[10px] text-slate-400">Periode berjalan</p>
             </div>
-            <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-800">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Status Operasi</span>
-              <p className="text-sm font-bold text-slate-200 mt-0.5">{truck.status}</p>
-              <p className="text-[10px] text-slate-400">Angkut TBS Sawit</p>
+          </div>
+
+          {/* Filter Bulan & Tahun (Melihat Biaya Bulan Sebelumnya & Tahun Sebelumnya) */}
+          <div className="p-3.5 bg-slate-950/90 rounded-xl border border-emerald-500/30 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-white block">
+                    Pilih Bulan & Tahun Biaya Unit ({truck.code})
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Lihat riwayat biaya unit pada bulan sebelumnya maupun tahun sebelumnya
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleStepMonth(-1)}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 transition"
+                  title="Lihat Bulan Sebelumnya"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Bulan Lalu</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    setSelectedMonth(String(now.getMonth()));
+                    setSelectedYear(String(now.getFullYear()));
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold border border-emerald-500/40 transition"
+                >
+                  Bulan Ini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStepMonth(1)}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1 transition"
+                  title="Lihat Bulan Berikutnya"
+                >
+                  <span>Berikutnya</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                  Pilih Bulan
+                </label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-semibold focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="all">Semua Bulan (1 Tahun Penuh)</option>
+                  {INDO_MONTHS.map((mName, idx) => (
+                    <option key={mName} value={String(idx)}>
+                      {idx + 1}. {mName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                  Pilih Tahun
+                </label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-semibold focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="all">Semua Tahun</option>
+                  {availableYears.map((yr) => (
+                    <option key={yr} value={String(yr)}>
+                      Tahun {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMonth('all');
+                    setSelectedYear('all');
+                  }}
+                  disabled={selectedMonth === 'all' && selectedYear === 'all'}
+                  className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center justify-center gap-1.5 transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Tampilkan Semua Periode</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -324,14 +511,19 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
 
         {/* Category Breakdown Cards */}
         <div className="space-y-3">
-          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5 text-emerald-400" />
-            Rincian Pengeluaran Berdasarkan Kategori ({truck.code})
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-emerald-400" />
+              Rincian Pengeluaran Berdasarkan Kategori ({truck.code} • {periodLabel})
+            </h2>
+            <span className="text-xs font-mono font-bold text-emerald-400">
+              Total Periode: {formatRupiah(periodUnitCost)}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {CATEGORIES.map((cat) => {
               const amount = categorySums[cat];
-              const pct = totalUnitCost > 0 ? (amount / totalUnitCost) * 100 : 0;
+              const pct = periodUnitCost > 0 ? (amount / periodUnitCost) * 100 : 0;
               const colors = CATEGORY_COLORS[cat];
               const isSelected = selectedCategory === cat;
 
@@ -383,7 +575,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Cari nota, bengkel, keterangan..."
+                  placeholder="Cari keterangan pengeluaran..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
@@ -444,21 +636,15 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
                           <Calendar className="w-3 h-3 text-slate-500" />
                           {formatDateIndo(exp.date, 'long')}
                         </span>
-                        {exp.invoiceNumber && (
-                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                            Nota: {exp.invoiceNumber}
-                          </span>
-                        )}
                       </div>
 
                       <p className="text-sm font-semibold text-slate-100">{exp.description}</p>
 
-                      <div className="flex items-center gap-4 text-xs text-slate-400">
-                        <span>Vendor/Bengkel: <strong className="text-slate-300">{exp.vendor}</strong></span>
-                        {exp.createdByName && (
-                          <span className="hidden sm:inline">Dicatat oleh: {exp.createdByName}</span>
-                        )}
-                      </div>
+                      {exp.createdByName && (
+                        <div className="flex items-center gap-4 text-xs text-slate-400">
+                          <span>Dicatat oleh: {exp.createdByName}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex sm:flex-col items-baseline sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-800/60">

@@ -22,6 +22,8 @@ import {
   HeartHandshake,
   UserX,
   FileText,
+  Disc,
+  Wheat,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -92,22 +94,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const getCategoryIcon = (cat: ExpenseCategory) => {
     switch (cat) {
+      case 'Fuel':
+        return <Fuel className="w-4 h-4" />;
+      case 'Lubricant':
+        return <Droplets className="w-4 h-4" />;
       case 'Sparepart':
         return <Package className="w-4 h-4" />;
-      case 'Oli':
-        return <Droplets className="w-4 h-4" />;
-      case 'Minyak':
-        return <Fuel className="w-4 h-4" />;
-      case 'Mekanik':
+      case 'Tyre & Tubes':
+        return <Disc className="w-4 h-4" />;
+      case 'Workshop':
         return <Wrench className="w-4 h-4" />;
-      case 'Supir':
-        return <UserCheck className="w-4 h-4" />;
-      case 'Tunjangan BPJS':
+      case 'BPJS':
         return <ShieldCheck className="w-4 h-4" />;
-      case 'Tunjangan Jamsostek':
+      case 'Jamsostek':
         return <HeartHandshake className="w-4 h-4" />;
       case 'Potongan Mangkir':
         return <UserX className="w-4 h-4" />;
+      case 'Beras':
+        return <Wheat className="w-4 h-4" />;
+      case 'Supir':
+        return <UserCheck className="w-4 h-4" />;
       default:
         return <Layers className="w-4 h-4" />;
     }
@@ -132,7 +138,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Dashboard Biaya Truk TBS Harbor Homes
             </h1>
             <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-              Pemantauan pengeluaran armada pengangkut Tandan Buah Segar kelapa sawit secara real-time mencakup Sparepart, Oli, Solar (Minyak), Jasa Mekanik, dan Upah Supir.
+              Pemantauan pengeluaran armada pengangkut Tandan Buah Segar kelapa sawit secara real-time mencakup Fuel, Lubricant, Sparepart, Tyre & Tubes, Workshop, BPJS, Jamsostek, Potongan Mangkir, Beras, dan Supir.
             </p>
           </div>
 
@@ -197,7 +203,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Termasuk <strong className="text-slate-200">Unit 90</strong> (BM 8456 TBS)
+            {truckCount > 0 ? `Terdaftar ${truckCount} unit aktif di sistem` : 'Belum ada unit armada terdaftar'}
           </p>
         </div>
 
@@ -239,7 +245,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Rincian Biaya per Kategori (Sparepart, Oli, Minyak, Mekanik, Supir) */}
+      {/* Rincian Biaya per Kategori Operasional */}
       <div className="bg-slate-900/80 rounded-2xl p-6 border border-slate-800 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
           <div>
@@ -248,7 +254,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Rincian Biaya per Kategori Operasional
             </h2>
             <p className="text-xs text-slate-400">
-              Alokasi pengeluaran untuk 8 pos biaya: Sparepart, Oli, Solar, Mekanik, Supir, Tunjangan BPJS, Tunjangan Jamsostek, dan Potongan Mangkir
+              Alokasi pengeluaran untuk 10 pos biaya: Fuel, Lubricant, Sparepart, Tyre & Tubes, Workshop, BPJS, Jamsostek, Potongan Mangkir, Beras, dan Supir
             </p>
           </div>
           <button
@@ -368,33 +374,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {/* 3 Pos Biaya Utama Mobile */}
                   <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-900 text-[10px] font-mono">
                     <div className="bg-slate-900/90 p-1.5 rounded text-center">
-                      <span className="text-slate-500 block text-[9px] uppercase">Part</span>
-                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Sparepart)}</span>
+                      <span className="text-slate-500 block text-[9px] uppercase">Fuel</span>
+                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Fuel || 0)}</span>
                     </div>
                     <div className="bg-slate-900/90 p-1.5 rounded text-center">
-                      <span className="text-slate-500 block text-[9px] uppercase">Oli</span>
-                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Oli)}</span>
+                      <span className="text-slate-500 block text-[9px] uppercase">Lubricant</span>
+                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Lubricant || 0)}</span>
                     </div>
                     <div className="bg-slate-900/90 p-1.5 rounded text-center">
-                      <span className="text-slate-500 block text-[9px] uppercase">Solar</span>
-                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Minyak)}</span>
+                      <span className="text-slate-500 block text-[9px] uppercase">Sparepart</span>
+                      <span className="text-slate-300 font-semibold">{formatNumber(byCat.Sparepart || 0)}</span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Desktop View: Full 8-column Table (hidden on mobile, block on md+) */}
+            {/* Desktop View: Full Table (hidden on mobile, block on md+) */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
                     <th className="pb-3 font-semibold">Unit & Plat</th>
                     <th className="pb-3 font-semibold">Supir</th>
+                    <th className="pb-3 font-semibold text-right">Fuel</th>
+                    <th className="pb-3 font-semibold text-right">Lubricant</th>
                     <th className="pb-3 font-semibold text-right">Sparepart</th>
-                    <th className="pb-3 font-semibold text-right">Oli</th>
-                    <th className="pb-3 font-semibold text-right">Minyak (BBM)</th>
-                    <th className="pb-3 font-semibold text-right">Mekanik</th>
+                    <th className="pb-3 font-semibold text-right">Tyre & Tubes</th>
+                    <th className="pb-3 font-semibold text-right">Workshop</th>
                     <th className="pb-3 font-semibold text-right">Supir</th>
                     <th className="pb-3 font-semibold text-right">Total Biaya</th>
                   </tr>
@@ -432,19 +439,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3.5 text-right font-mono text-slate-300">
-                        {formatNumber(byCat.Sparepart)}
+                        {formatNumber(byCat.Fuel || 0)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-slate-300">
-                        {formatNumber(byCat.Oli)}
+                        {formatNumber(byCat.Lubricant || 0)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-slate-300">
-                        {formatNumber(byCat.Minyak)}
+                        {formatNumber(byCat.Sparepart || 0)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-slate-300">
-                        {formatNumber(byCat.Mekanik)}
+                        {formatNumber(byCat['Tyre & Tubes'] || 0)}
                       </td>
                       <td className="py-3.5 text-right font-mono text-slate-300">
-                        {formatNumber(byCat.Supir)}
+                        {formatNumber(byCat.Workshop || 0)}
+                      </td>
+                      <td className="py-3.5 text-right font-mono text-slate-300">
+                        {formatNumber(byCat.Supir || 0)}
                       </td>
                       <td className="py-3.5 text-right">
                         <div className="font-bold text-emerald-400 font-mono text-sm">
