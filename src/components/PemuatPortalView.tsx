@@ -124,7 +124,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   const [formData, setFormData] = useState<NewDailyRecord>({
     date: todayStr,
     truckNumber: 'DT 90',
-    driverName: initialPemuatName || 'Anton',
+    driverName: initialPemuatName || '',
     tonnage: '' as any,
     afdeling: 'Afdeling 1',
     notes: '',
@@ -149,6 +149,60 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   // Share state
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
+  // Multi-select Pemuat di Form Input Baru (format: NAMA1/NAMA2/NAMA3)
+  const selectedPemuatList = useMemo(() => {
+    if (!formData.driverName) return [];
+    return formData.driverName
+      .split('/')
+      .map((n) => n.trim().toUpperCase())
+      .filter(Boolean);
+  }, [formData.driverName]);
+
+  const handleTogglePemuatName = (name: string) => {
+    const upperName = name.trim().toUpperCase();
+    let currentNames = [...selectedPemuatList];
+    if (currentNames.includes(upperName)) {
+      currentNames = currentNames.filter((n) => n !== upperName);
+    } else {
+      currentNames.push(upperName);
+    }
+    const combined = currentNames.join('/');
+    setFormData((prev) => ({ ...prev, driverName: combined }));
+  };
+
+  // Multi-select Pemuat di Form Edit
+  const selectedEditPemuatList = useMemo(() => {
+    if (!editFormData || !editFormData.driverName) return [];
+    return editFormData.driverName
+      .split('/')
+      .map((n) => n.trim().toUpperCase())
+      .filter(Boolean);
+  }, [editFormData?.driverName]);
+
+  const handleToggleEditPemuatName = (name: string) => {
+    const upperName = name.trim().toUpperCase();
+    let currentNames = [...selectedEditPemuatList];
+    if (currentNames.includes(upperName)) {
+      currentNames = currentNames.filter((n) => n !== upperName);
+    } else {
+      currentNames.push(upperName);
+    }
+    setEditFormData((prev) => (prev ? { ...prev, driverName: currentNames.join('/') } : prev));
+  };
+
+  // Hitung nomor ritase otomatis khusus afdeling & tanggal yang dipilih
+  const afdelingRitsOnDate = useMemo(() => {
+    const selectedDate = formData.date || todayStr;
+    const selectedAfd = formData.afdeling || 'Afdeling 1';
+    return records.filter((r) => r.date === selectedDate && r.afdeling === selectedAfd);
+  }, [records, formData.date, formData.afdeling, todayStr]);
+
+  const nextRitNumber = useMemo(() => {
+    if (afdelingRitsOnDate.length === 0) return 1;
+    const maxRit = afdelingRitsOnDate.reduce((max, r) => Math.max(max, r.ritNumber || 0), 0);
+    return Math.max(maxRit, afdelingRitsOnDate.length) + 1;
+  }, [afdelingRitsOnDate]);
+
   // Notifikasi helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
@@ -157,10 +211,10 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     }, 4000);
   };
 
-  // Sync Pemuat name changes to form
+  // Sync Pemuat name changes to form if set
   useEffect(() => {
-    if (activePemuat) {
-      setFormData((prev) => ({ ...prev, driverName: activePemuat }));
+    if (activePemuat && !formData.driverName) {
+      setFormData((prev) => ({ ...prev, driverName: activePemuat.toUpperCase() }));
     }
   }, [activePemuat]);
 
@@ -197,7 +251,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       return;
     }
     if (!formData.driverName.trim()) {
-      showToast('Mohon masukkan Nama Pemuat', 'error');
+      showToast('Mohon masukkan Nama Pemuat (pilih dari daftar atau ketik)', 'error');
       return;
     }
     const ton = parseFloat(String(formData.tonnage));
@@ -211,13 +265,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       await addDailyRecord({
         date: formData.date || todayStr,
         truckNumber: formData.truckNumber.trim().toUpperCase(),
-        driverName: formData.driverName.trim(),
+        driverName: formData.driverName.trim().toUpperCase(),
         tonnage: ton,
         afdeling: formData.afdeling.trim() || 'Afdeling 1',
         notes: (formData.notes || '').trim(),
+        ritNumber: nextRitNumber,
       });
 
-      showToast(`Pengiriman unit ${formData.truckNumber} (${ton} Ton) berhasil tersimpan langsung ke Firestore!`, 'success');
+      showToast(`Pengiriman unit ${formData.truckNumber} (${ton} Ton, Rit ${nextRitNumber} - ${formData.afdeling}) berhasil disimpan!`, 'success');
 
       // Reset form but retain date & truck for repetitive inputs
       setFormData((prev) => ({
@@ -255,13 +310,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       await updateDailyRecord({
         ...editFormData,
         truckNumber: editFormData.truckNumber.trim().toUpperCase(),
-        driverName: editFormData.driverName.trim(),
+        driverName: editFormData.driverName.trim().toUpperCase(),
         tonnage: ton,
         afdeling: editFormData.afdeling.trim() || 'Afdeling 1',
         notes: (editFormData.notes || '').trim(),
+        ritNumber: editFormData.ritNumber || 1,
       });
 
-      showToast(`Data unit ${editFormData.truckNumber} berhasil diperbarui!`, 'success');
+      showToast(`Data unit ${editFormData.truckNumber} (Rit ${editFormData.ritNumber || 1}) berhasil diperbarui!`, 'success');
       setRecordToEdit(null);
       setEditFormData(null);
     } catch (err: any) {
@@ -591,7 +647,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         </div>
       )}
 
-      {/* ISOLATED TOP NAVIGATION BAR */}
+      {/* TOP NAVIGATION BAR */}
       <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
@@ -606,11 +662,11 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     Portal Pemuat TBS
                   </span>
                   <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30">
-                    Terisolasi
+                    Lapangan
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 hidden sm:block">
-                  Akses Khusus Lapangan • Catatan Rit & Tonase TBS
+                  Catatan Ritase & Tonase TBS Kebun
                 </p>
               </div>
             </div>
@@ -658,40 +714,27 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Banner Selamat Datang Pemuat */}
-        <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="p-1 rounded-md bg-emerald-500/20 text-emerald-400">
-                  <Smartphone className="w-4 h-4" />
-                </span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                  Akses Cepat Smartphone
-                </span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                Riwayat & Input Data Harian Truk TBS
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
-                Laman ini dirancang khusus untuk pemuat di kebun agar dapat menginput dan memantau tonase buah kelapa sawit secara real-time langsung dari HP tanpa melalui menu admin.
-              </p>
-            </div>
+        {/* Header Bar Portal Pemuat */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+              <Truck className="w-5 h-5 text-emerald-400" />
+              <span>Input & Riwayat Muatan TBS Lapangan</span>
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Input pengangkutan TBS langsung tersimpan ke database cloud secara real-time
+            </p>
+          </div>
 
-            {/* Quick Profile Filter */}
-            <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex items-center gap-2 shrink-0">
-              <User className="w-4 h-4 text-emerald-400" />
-              <div className="text-xs">
-                <span className="text-slate-400 block text-[10px]">Nama Pemuat:</span>
-                <input
-                  type="text"
-                  value={activePemuat}
-                  onChange={(e) => setActivePemuat(e.target.value)}
-                  placeholder="Ketik nama Anda..."
-                  className="bg-transparent border-b border-emerald-500/40 text-emerald-300 font-bold focus:outline-none focus:border-emerald-400 text-xs py-0.5"
-                />
-              </div>
-            </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsPemuatManagerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Kelola Daftar Pemuat</span>
+            </button>
           </div>
         </div>
 
@@ -746,8 +789,8 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         </div>
 
         {/* FORM INPUT CEPAT LAPANGAN */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
             <div className="flex items-center gap-2.5">
               <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
                 <Plus className="w-5 h-5" />
@@ -760,6 +803,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   Data otomatis tersimpan ke cloud Firebase Firestore secara langsung
                 </p>
               </div>
+            </div>
+
+            {/* Indikator Rit Otomatis */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 text-xs font-mono font-bold">
+              <span>Rit Otomatis:</span>
+              <span className="bg-sky-500 text-slate-950 px-2 py-0.5 rounded font-black">
+                Rit {nextRitNumber}
+              </span>
             </div>
           </div>
 
@@ -794,15 +845,15 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   required
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-bold uppercase"
                 />
-                {/* Quick Unit Pills */}
+                {/* Quick Unit Pills dari Armada */}
                 <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                  {QUICK_TRUCKS.slice(0, 4).map((dt) => (
+                  {dynamicTruckCodes.slice(0, 5).map((dt) => (
                     <button
                       key={dt}
                       type="button"
                       onClick={() => setFormData((prev) => ({ ...prev, truckNumber: dt }))}
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition ${
-                        formData.truckNumber === dt
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono transition cursor-pointer ${
+                        formData.truckNumber.toUpperCase() === dt
                           ? 'bg-emerald-500 text-slate-950 font-bold'
                           : 'bg-slate-800 text-slate-400 hover:text-white'
                       }`}
@@ -811,22 +862,6 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* Nama Pemuat */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-emerald-400" />
-                  Nama Pemuat:
-                </label>
-                <input
-                  type="text"
-                  value={formData.driverName}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, driverName: e.target.value }))}
-                  placeholder="Contoh: Anton"
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-semibold"
-                />
               </div>
 
               {/* Tonase (Ton) */}
@@ -856,7 +891,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 <select
                   value={formData.afdeling}
                   onChange={(e) => setFormData((prev) => ({ ...prev, afdeling: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500 font-semibold"
                 >
                   {QUICK_AFDELINGS.map((afd) => (
                     <option key={afd} value={afd}>
@@ -864,7 +899,96 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-sky-400 mt-1 font-mono">
+                  {afdelingRitsOnDate.length} rit tercatat hari ini
+                </p>
               </div>
+
+              {/* Box Preview Ritase Otomatis */}
+              <div className="bg-slate-950/90 border border-sky-500/30 rounded-xl p-2.5 flex flex-col justify-between">
+                <span className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">
+                  Nomor Rit Otomatis
+                </span>
+                <div className="my-auto">
+                  <div className="text-xl font-black text-sky-300 font-mono">
+                    Rit {nextRitNumber}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    Khusus {formData.afdeling}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Nama Pemuat (Multi-Select Otomatis dengan Garis Miring) */}
+            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Nama Pemuat (Bisa Lebih Dari 1 Orang):</span>
+                  </label>
+                  {selectedPemuatList.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      {selectedPemuatList.length} Terpilih
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedPemuatList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, driverName: '' }))}
+                      className="text-[10px] text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                    >
+                      Bersihkan
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsPemuatManagerOpen(true)}
+                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>+ Tulis / Kelola Pemuat</span>
+                  </button>
+                </div>
+              </div>
+
+              <input
+                type="text"
+                value={formData.driverName}
+                onChange={(e) => setFormData((prev) => ({ ...prev, driverName: e.target.value }))}
+                placeholder="Klik tombol nama di bawah atau ketik manual (contoh: ANTON/DELFIN/YUVEN)..."
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono font-bold"
+              />
+
+              {/* Tombol Cepat Multi-Select Pemuat */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {pemuatMaster.map((p) => {
+                  const isSelected = selectedPemuatList.includes(p.name.toUpperCase());
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleTogglePemuatName(p.name)}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border flex items-center gap-1 cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm shadow-emerald-500/20'
+                          : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      <span>{p.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                * Klik nama pemuat untuk memilih lebih dari 1 orang (otomatis digabung pemisah garis miring, cth: <strong>ANTON/DELFIN/YUVEN</strong>).
+              </p>
             </div>
 
             {/* Catatan / Keterangan & Tombol Simpan */}
@@ -1254,11 +1378,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                       className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition space-y-2"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
                             {r.truckNumber}
                           </span>
                           <span className="text-xs text-slate-300 font-medium">{r.afdeling}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                            Rit {r.ritNumber || 1}
+                          </span>
                         </div>
                         <div className="text-right">
                           <span className="text-base font-black text-emerald-400 font-mono">
@@ -1310,6 +1437,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
                       <th className="pb-3 font-semibold w-10">No</th>
                       <th className="pb-3 font-semibold">Tanggal</th>
+                      <th className="pb-3 font-semibold">Rit</th>
                       <th className="pb-3 font-semibold">Unit Truk</th>
                       <th className="pb-3 font-semibold">Pemuat</th>
                       <th className="pb-3 font-semibold">Afdeling</th>
@@ -1321,7 +1449,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {filteredRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-500">
+                        <td colSpan={9} className="py-12 text-center text-slate-500">
                           <Truck className="w-8 h-8 mx-auto text-slate-600 mb-2 opacity-50" />
                           <p className="font-semibold text-slate-400">Tidak ada catatan pengiriman</p>
                           <p className="text-[11px] text-slate-500 mt-0.5">Input data baru melalui form di atas.</p>
@@ -1332,6 +1460,11 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                         <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-3 text-slate-500 font-mono">{idx + 1}</td>
                           <td className="py-3 text-slate-300 font-mono">{r.date}</td>
+                          <td className="py-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                              Rit {r.ritNumber || 1}
+                            </span>
+                          </td>
                           <td className="py-3">
                             <span className="font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
                               {r.truckNumber}
@@ -1511,6 +1644,46 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   )}
                 </div>
 
+                {/* Rekap Urutan Ritase per Afdeling pada Tanggal Ini */}
+                {(() => {
+                  const afdMap = new Map<string, DailyRecord[]>();
+                  dayTrips.forEach((t) => {
+                    const afd = t.afdeling || 'Afdeling 1';
+                    if (!afdMap.has(afd)) afdMap.set(afd, []);
+                    afdMap.get(afd)!.push(t);
+                  });
+                  if (afdMap.size === 0) return null;
+                  return (
+                    <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>Urutan Ritase per Afdeling:</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {Array.from(afdMap.entries()).map(([afdName, tList]) => {
+                          const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
+                          const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
+                          return (
+                            <div key={afdName} className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1.5">
+                              <div className="flex items-center justify-between gap-2 font-bold text-slate-200">
+                                <span>{afdName}</span>
+                                <span className="text-emerald-400 font-mono text-[11px]">{tList.length} Rit ({totalTons.toFixed(2)}T)</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {sortedList.map((t) => (
+                                  <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono">
+                                    Rit {t.ritNumber || 1}: {t.truckNumber} ({t.tonnage}T)
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Daftar Rincian Ritase & Muatan Dengan Fitur Pencarian */}
                 <div className="space-y-2.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1604,6 +1777,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                             <span className="text-slate-500 text-xs font-mono w-4">{idx + 1}</span>
                             <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25 shrink-0">
                               {trip.truckNumber}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                              Rit {trip.ritNumber || 1}
                             </span>
                             <div>
                               <div className="flex items-center gap-2 text-xs">
@@ -1733,28 +1909,75 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 />
               </div>
 
+              {/* Nama Pemuat (Multi-Select) */}
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Nama Pemuat:</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-300">Nama Pemuat:</label>
+                  {selectedEditPemuatList.length > 0 && (
+                    <span className="text-[10px] text-emerald-300 font-bold font-mono bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                      {selectedEditPemuatList.length} Dipilih
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={editFormData.driverName}
                   onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
+                  placeholder="Contoh: ANTON/DELFIN/YUVEN"
                   required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500 font-bold"
                 />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {pemuatMaster.map((p) => {
+                    const isSelected = selectedEditPemuatList.includes(p.name.toUpperCase());
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleToggleEditPemuatName(p.name)}
+                        className={`text-[10px] px-2 py-0.5 rounded font-medium transition border flex items-center gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
+                            : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        <span>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Tonase (Ton):</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.1"
-                  value={editFormData.tonnage}
-                  onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500 text-sm"
-                />
+              {/* Nomor Ritase (Rit) & Tonase */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Nomor Ritase (Rit):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editFormData.ritNumber || 1}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        ritNumber: parseInt(e.target.value, 10) || 1,
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sky-400 font-bold font-mono focus:outline-none focus:border-emerald-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Tonase (Ton):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.1"
+                    value={editFormData.tonnage}
+                    onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
+                    required
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500 text-sm"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1847,6 +2070,16 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Pemuat Manager Modal */}
+      <PemuatManagerModal
+        isOpen={isPemuatManagerOpen}
+        onClose={() => setIsPemuatManagerOpen(false)}
+        pemuatList={pemuatMaster}
+        onAddPemuat={addPemuatFirestore}
+        onDeletePemuat={deletePemuatFirestore}
+        onSelectPemuat={(name) => handleTogglePemuatName(name)}
+      />
 
       {/* FOOTER */}
       <footer className="mt-auto border-t border-slate-900 py-4 text-center text-xs text-slate-500">

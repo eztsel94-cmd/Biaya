@@ -142,68 +142,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     }
   };
 
-  // Muat contoh catatan bebas untuk pengujian cepat
-  const handleLoadSampleDT90 = () => {
-    setActiveTab('freeform');
-    setInputText(`DT 90
-- Bio solar 100 liter 850.000 SPBU Pasir
-- Kampas rem depan bendix 450rb
-- Ongkos montir bengkel las 200rb
-- Tunjangan BPJS supir 175.000
-- Tunjangan Jamsostek supir 150rb
-- Potongan mangkir 1 hari 125.000
-- Upah supir ritase afdeling 2 450.000
-- Ganti oli mesin meditran 550rb`);
-    setErrorMessage(null);
-  };
 
-  const handleLoadSampleMultiDT = () => {
-    setActiveTab('freeform');
-    setInputText(`PENGELUARAN ARMADA TRUK TBS - 24 MARET
-
-DT 90:
-- Bio solar 100 liter 850.000
-- Kampas rem depan 450rb
-- Tunjangan BPJS supir 175.000
-- Tunjangan Jamsostek supir 150.000
-- Potongan mangkir supir 125.000
-
-DT 01:
-- Bio solar 90 liter 750.000 SPBU Pasir
-- Ganti ban luar bridgestone 1.950.000
-- Ongkos las bak dump truk 350rb
-- Ganti oli gardan rored 320rb
-
-DT 03:
-- Solar industri 800.000
-- Filter solar & oli iself 380rb
-- Jasa tuneup diesel 250rb`);
-    setErrorMessage(null);
-  };
-
-  // Contoh tanpa kode DT untuk menguji logika Unit Default ON vs OFF
-  const handleLoadSampleWithoutDT = () => {
-    setActiveTab('freeform');
-    setInputText(`- Bio solar 100 liter 850.000 SPBU Pasir
-- Kampas rem depan bendix 450rb
-- Ongkos montir bengkel las 200rb
-- Ganti oli mesin meditran 550rb
-- Tambal ban dump truk 80.000`);
-    setErrorMessage(null);
-  };
-
-  // Contoh dengan kode DT yang belum terdaftar di sistem (menguji Fitur Data Tidak Cocok)
-  const handleLoadSampleMismatchDT = () => {
-    setActiveTab('freeform');
-    setInputText(`DT 88 (Unit Belum Terdaftar di Sistem):
-- Beli ban luar dump truck Rp 2.450.000
-- Jasa pasang ban & cek rem 150.000
-
-DT 90:
-- Ganti oli mesin Meditran SX4 10 Liter 580.000
-- Servis kampas rem depan 200.000`);
-    setErrorMessage(null);
-  };
 
   // Handle file upload
   const handleFileUpload = async (file: File) => {
@@ -680,47 +619,8 @@ DT 90:
               </button>
             </div>
 
-            {/* Action Buttons & Presets */}
+            {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleLoadSampleDT90}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition cursor-pointer"
-                title="Muat contoh catatan biaya unit DT 90"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Contoh DT 90</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLoadSampleMultiDT}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 transition cursor-pointer"
-                title="Muat contoh catatan gabungan banyak truk (DT 90, DT 01, DT 03)"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                <span>Contoh Multi Unit</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLoadSampleWithoutDT}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition cursor-pointer"
-                title="Uji coba teks tanpa kode DT (Uji coba Toggle DT Default ON vs OFF)"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Contoh Tanpa Kode DT</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLoadSampleMismatchDT}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition cursor-pointer"
-                title="Uji coba catatan dengan kode DT tidak cocok di database (Fitur Data Tidak Cocok)"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-                <span>Contoh Kode Tidak Cocok (DT 88)</span>
-              </button>
 
               {inputText && (
                 <button

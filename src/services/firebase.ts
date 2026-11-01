@@ -21,8 +21,8 @@ import { TruckUnit, ExpenseRecord, AppUser } from "../types/truck";
 import { DailyRecord, NewDailyRecord } from "../types/dailyRecord";
 import { INITIAL_TRUCKS, INITIAL_EXPENSES } from "../data/initialData";
 
-// Konfigurasi Firebase Firestore pengguna
-const firebaseConfig = {
+// Konfigurasi Firebase Firestore Default Sistem
+export const DEFAULT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyAzsjVewayOI1aq6uT82_PtulfmUc8Fk_M",
   authDomain: "traksi-22f5b.firebaseapp.com",
   projectId: "traksi-22f5b",
@@ -32,16 +32,85 @@ const firebaseConfig = {
   measurementId: "G-2Y41RYMQDM",
 };
 
-// Inisialisasi Firebase App & Firestore
-export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const STORAGE_KEY_FIREBASE = "custom_firebase_config";
+
+export function getCustomFirebaseConfig(): any | null {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_FIREBASE) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.projectId && parsed.apiKey) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCustomFirebaseConfig(config: any): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEY_FIREBASE, JSON.stringify(config));
+  }
+}
+
+export function resetToDefaultFirebaseConfig(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(STORAGE_KEY_FIREBASE);
+  }
+}
+
+export function isUsingCustomFirebase(): boolean {
+  return Boolean(getCustomFirebaseConfig());
+}
+
+export function getCurrentFirebaseConfig(): any {
+  return getCustomFirebaseConfig() || DEFAULT_FIREBASE_CONFIG;
+}
+
+export async function testFirebaseConnection(configToTest?: any): Promise<{ success: boolean; message: string; projectId: string }> {
+  const targetConfig = configToTest || getCurrentFirebaseConfig();
+  if (!targetConfig?.apiKey || !targetConfig?.projectId) {
+    return { success: false, message: "Konfigurasi tidak lengkap (ApiKey & ProjectId wajib diisi)", projectId: "" };
+  }
+
+  const testAppName = `test-app-${Date.now()}`;
+  try {
+    const testApp = initializeApp(targetConfig, testAppName);
+    const testDb = getFirestore(testApp);
+    const testCol = collection(testDb, "_connection_probe_");
+    const testQuery = query(testCol, orderBy("__name__"), where("__name__", "==", "probe"));
+    await getDocs(testQuery);
+    return {
+      success: true,
+      message: `Berhasil terhubung ke Firebase Firestore proyek "${targetConfig.projectId}"!`,
+      projectId: targetConfig.projectId,
+    };
+  } catch (err: any) {
+    if (err?.code === "permission-denied" || err?.message?.includes("insufficient permissions")) {
+      return {
+        success: true,
+        message: `Proyek "${targetConfig.projectId}" terhubung secara sah! Aturan Firestore (Security Rules) saat ini memerlukan permission atau login.`,
+        projectId: targetConfig.projectId,
+      };
+    }
+    return {
+      success: false,
+      message: `Gagal terhubung: ${err?.message || "Periksa kembali Project ID atau API Key"}`,
+      projectId: targetConfig.projectId || "",
+    };
+  }
+}
+
+// Inisialisasi Firebase App & Firestore dengan konfigurasi aktif (Kustom atau Default)
+const activeFirebaseConfig = getCurrentFirebaseConfig();
+export const app = getApps().length > 0 ? getApp() : initializeApp(activeFirebaseConfig);
 export const db = getFirestore(app);
 
 // Inisialisasi Auth untuk otentikasi otomatis jika aturan Firestore memerlukan auth
 try {
   const auth = getAuth(app);
   signInAnonymously(auth).catch((authErr) => {
-    // Jika anonymous auth belum diaktifkan di Firebase Console,
-    // Firestore tetap dapat bekerja dengan open rules (allow read, write: if true)
     console.info("Anonymous auth status:", authErr?.message || "Not enabled, using open rules");
   });
 } catch (e) {
@@ -401,6 +470,7 @@ export function subscribeToDailyRecords(
             driverName: data.driverName || "-",
             tonnage: typeof data.tonnage === "number" ? data.tonnage : parseFloat(data.tonnage) || 0,
             afdeling: data.afdeling || "Afdeling 1",
+            ritNumber: typeof data.ritNumber === "number" ? data.ritNumber : parseInt(data.ritNumber, 10) || undefined,
             notes: data.notes || "",
             createdAt: data.createdAt,
           });
@@ -422,12 +492,29 @@ export function subscribeToDailyRecords(
 }
 
 export async function addDailyRecord(record: NewDailyRecord): Promise<string> {
+  // Hitung nomor ritase otomatis per afdeling & tanggal jika belum ditentukan
+  let calculatedRitNumber = record.ritNumber;
+  if (!calculatedRitNumber || calculatedRitNumber <= 0) {
+    try {
+      const q = query(
+        dailyRecordsCollection,
+        where("date", "==", record.date),
+        where("afdeling", "==", record.afdeling.trim())
+      );
+      const snap = await getDocs(q);
+      calculatedRitNumber = snap.size + 1;
+    } catch {
+      calculatedRitNumber = 1;
+    }
+  }
+
   const docRef = await addDoc(dailyRecordsCollection, {
     date: record.date,
     truckNumber: record.truckNumber.trim().toUpperCase(),
     driverName: record.driverName.trim(),
     tonnage: Number(record.tonnage),
     afdeling: record.afdeling.trim(),
+    ritNumber: Number(calculatedRitNumber),
     notes: (record.notes || "").trim(),
     createdAt: serverTimestamp(),
   });
@@ -447,6 +534,7 @@ export async function updateDailyRecord(record: DailyRecord): Promise<void> {
     driverName: record.driverName.trim(),
     tonnage: Number(record.tonnage),
     afdeling: record.afdeling.trim(),
+    ritNumber: Number(record.ritNumber) || 1,
     notes: (record.notes || "").trim(),
     updatedAt: serverTimestamp(),
   });
@@ -457,12 +545,14 @@ export async function updateDailyRecord(record: DailyRecord): Promise<void> {
 // ==========================================
 
 export const INITIAL_DEFAULT_PEMUAT = [
-  "Anton",
-  "Bambang",
-  "Candra",
-  "Dedik",
-  "Eko",
-  "Suryanto",
+  "ANTON",
+  "DELFIN",
+  "YUVEN",
+  "BAMBANG",
+  "CANDRA",
+  "DEDIK",
+  "EKO",
+  "SURYANTO",
 ];
 
 let isPemuatBootstrapped = false;

@@ -36,10 +36,10 @@ import {
   addDailyRecord,
   updateDailyRecord,
   deleteDailyRecord,
-  clearAllDemoDataFirestore,
   subscribeToFirestorePemuat,
   addPemuatFirestore,
   deletePemuatFirestore,
+  getCurrentFirebaseConfig,
   COLLECTION_NAME,
 } from '../services/firebase';
 import { SharePemuatModal } from './SharePemuatModal';
@@ -82,16 +82,66 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
     return () => unsub();
   }, []);
 
-  // Form State Input Baru (Default Contoh Cepat untuk Kemudahan Input)
+  // Form State Input Baru (Bersih, siap pakai untuk operasional harian)
   const todayStr = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState<NewDailyRecord>({
     date: todayStr,
     truckNumber: 'DT 90',
-    driverName: 'Anton',
-    tonnage: '8.4' as any,
+    driverName: '',
+    tonnage: '' as any,
     afdeling: 'Afdeling 1',
-    notes: 'TBS Masak PKS Inti',
+    notes: '',
   });
+
+  // Multi-Select Nama Pemuat: parsing helper (pemisah garis miring /)
+  const selectedPemuatList = useMemo(() => {
+    if (!formData.driverName) return [];
+    return formData.driverName
+      .split(/[\/,]/)
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
+  }, [formData.driverName]);
+
+  const handleTogglePemuatName = (nameToToggle: string) => {
+    const cleanTarget = nameToToggle.trim().toUpperCase();
+    const currentList = formData.driverName
+      ? formData.driverName
+          .split(/[\/,]/)
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+
+    const existsIndex = currentList.findIndex(
+      (n) => n.toLowerCase() === cleanTarget.toLowerCase()
+    );
+
+    let updatedList: string[];
+    if (existsIndex >= 0) {
+      updatedList = currentList.filter((_, idx) => idx !== existsIndex);
+    } else {
+      updatedList = [...currentList, cleanTarget];
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      driverName: updatedList.join('/'),
+    }));
+  };
+
+  // Perhitungan Nomor Ritase Otomatis per Afdeling & Tanggal (terpisah antar afdeling)
+  const afdelingRitsOnDate = useMemo(() => {
+    const targetAfd = (formData.afdeling || '').trim().toLowerCase();
+    const targetDate = formData.date || todayStr;
+    return records
+      .filter(
+        (r) =>
+          r.date === targetDate &&
+          (r.afdeling || '').trim().toLowerCase() === targetAfd
+      )
+      .sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
+  }, [records, formData.date, formData.afdeling, todayStr]);
+
+  const nextRitNumber = afdelingRitsOnDate.length + 1;
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -152,7 +202,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       return;
     }
     if (!formData.driverName.trim()) {
-      showToast('Mohon masukkan Nama Pemuat (contoh: Anton)', 'error');
+      showToast('Mohon pilih atau masukkan Nama Pemuat (bisa lebih dari satu, contoh: ANTON/DELFIN/YUVEN)', 'error');
       return;
     }
     const ton = parseFloat(String(formData.tonnage));
@@ -166,13 +216,14 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       await addDailyRecord({
         date: formData.date || todayStr,
         truckNumber: formData.truckNumber.trim().toUpperCase(),
-        driverName: formData.driverName.trim(),
+        driverName: formData.driverName.trim().toUpperCase(),
         tonnage: ton,
         afdeling: formData.afdeling.trim() || 'Afdeling 1',
+        ritNumber: nextRitNumber,
         notes: (formData.notes || '').trim(),
       });
 
-      showToast(`Data pengiriman ${formData.truckNumber} (${ton} Ton) berhasil tersimpan ke Firestore!`, 'success');
+      showToast(`Data pengiriman ${formData.truckNumber} - Rit ${nextRitNumber} (${formData.afdeling}, ${ton} Ton) berhasil tersimpan ke Firestore!`, 'success');
 
       // Reset form tapi pertahankan tanggal dan afdeling untuk memudahkan input berulang
       setFormData((prev) => ({
@@ -252,88 +303,27 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
     }
   };
 
-  // Muat 5 contoh data pengiriman TBS ke Firestore untuk uji coba cepat
-  const handleLoadSampleData = async () => {
-    setIsSubmitting(true);
-    try {
-      const sampleRows: Array<{
-        date: string;
-        truckNumber: string;
-        driverName: string;
-        tonnage: number;
-        afdeling: string;
-        notes: string;
-      }> = [
-        {
-          date: todayStr,
-          truckNumber: 'DT 90',
-          driverName: 'Anton',
-          tonnage: 8.4,
-          afdeling: 'Afdeling 1',
-          notes: 'TBS Masak Blok A12 PKS Inti',
-        },
-        {
-          date: todayStr,
-          truckNumber: 'DT 01',
-          driverName: 'Bambang',
-          tonnage: 8.1,
-          afdeling: 'Afdeling 2',
-          notes: 'TBS Buah Super Divisi 2',
-        },
-        {
-          date: todayStr,
-          truckNumber: 'DT 03',
-          driverName: 'Suryanto',
-          tonnage: 8.65,
-          afdeling: 'Afdeling 3',
-          notes: 'TBS Plasma Kemitraan',
-        },
-        {
-          date: todayStr,
-          truckNumber: 'DT 90',
-          driverName: 'Anton',
-          tonnage: 8.25,
-          afdeling: 'Afdeling 1',
-          notes: 'Trip Sore Pabrik Kelapa Sawit',
-        },
-        {
-          date: todayStr,
-          truckNumber: 'DT 02',
-          driverName: 'Rahmad',
-          tonnage: 7.9,
-          afdeling: 'Afdeling 4',
-          notes: 'TBS Restan Panen Pagi',
-        },
-      ];
+  // Multi-select Pemuat di modal edit
+  const selectedEditPemuatList = useMemo(() => {
+    if (!editFormData || !editFormData.driverName) return [];
+    return editFormData.driverName
+      .split('/')
+      .map((n) => n.trim().toUpperCase())
+      .filter(Boolean);
+  }, [editFormData?.driverName]);
 
-      for (const row of sampleRows) {
-        await addDailyRecord(row);
-      }
-      showToast('5 data contoh pengiriman TBS berhasil dimasukkan ke Firestore!', 'success');
-    } catch (err: any) {
-      console.error('Error insert sample data:', err);
-      showToast(`Gagal memasukkan contoh data: ${err.message}`, 'error');
-    } finally {
-      setIsSubmitting(false);
+  const handleToggleEditPemuatName = (name: string) => {
+    const upperName = name.trim().toUpperCase();
+    let currentNames = [...selectedEditPemuatList];
+    if (currentNames.includes(upperName)) {
+      currentNames = currentNames.filter((n) => n !== upperName);
+    } else {
+      currentNames.push(upperName);
     }
+    setEditFormData((prev) => (prev ? { ...prev, driverName: currentNames.join('/') } : prev));
   };
 
-  // Bersihkan data contoh dari Firestore
-  const handleClearDemoData = async () => {
-    if (!window.confirm('Bersihkan seluruh data contoh / uji coba dari Firestore? Data catatan asli Anda tidak akan dihapus.')) return;
-    setIsSubmitting(true);
-    try {
-      const res = await clearAllDemoDataFirestore();
-      showToast(
-        `Berhasil membersihkan data contoh dari Firestore (${res.deletedDaily} catatan rit & ${res.deletedExpenses} biaya demo dibersihkan).`,
-        'success'
-      );
-    } catch (err: any) {
-      showToast(`Gagal membersihkan data contoh: ${err.message}`, 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+
 
   // Ekspor ke Excel (.xlsx)
   const handleExportExcel = () => {
@@ -418,6 +408,33 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
     });
   }, [records, searchQuery, filterAfdeling, filterTruck, filterDateRange, todayStr]);
 
+  // Rekap Urutan Ritase per Afdeling (untuk memantau urutan rit pertama hingga terakhir per afdeling)
+  const afdelingRitBreakdown = useMemo(() => {
+    const map = new Map<string, DailyRecord[]>();
+    const sorted = [...filteredRecords].sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.ritNumber || 0) - (b.ritNumber || 0);
+    });
+
+    sorted.forEach((r) => {
+      const afd = r.afdeling || 'Afdeling 1';
+      if (!map.has(afd)) {
+        map.set(afd, []);
+      }
+      map.get(afd)!.push(r);
+    });
+
+    return Array.from(map.entries()).map(([afdeling, trips]) => {
+      const totalTons = trips.reduce((sum, t) => sum + (Number(t.tonnage) || 0), 0);
+      return {
+        afdeling,
+        trips,
+        totalTons,
+        totalRit: trips.length,
+      };
+    });
+  }, [filteredRecords]);
+
   // Statistik Ringkasan
   const totalTonnage = useMemo(() => {
     return filteredRecords.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
@@ -498,43 +515,17 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
-              <span>Firestore: <strong className="text-emerald-400 font-mono">traksi-22f5b</strong></span>
+              <span>Firestore: <strong className="text-emerald-400 font-mono">{getCurrentFirebaseConfig().projectId}</strong></span>
             </div>
 
-            {/* Tombol Bagikan Link Khusus Pemuat (Terisolasi) */}
+            {/* Tombol Bagikan Link Khusus Pemuat */}
             <button
               onClick={() => setIsShareModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-black transition shadow-lg shadow-emerald-500/25 cursor-pointer"
-              title="Buka & bagikan tautan khusus pemuat agar bisa akses terisolasi dari smartphone"
+              title="Buka & bagikan tautan khusus pemuat agar bisa akses cepat dari smartphone"
             >
               <Share2 className="w-4 h-4 text-slate-950" />
-              <span>Link Khusus Pemuat</span>
-              <span className="hidden sm:inline-block bg-slate-950/20 px-1.5 py-0.2 rounded text-[10px] font-extrabold uppercase">
-                Terisolasi
-              </span>
-            </button>
-
-            {/* Tombol Isi 5 Contoh Data */}
-            <button
-              onClick={handleLoadSampleData}
-              disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
-              title="Isi contoh 5 data pengangkutan TBS untuk simulasi / uji coba cepat"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Isi 5 Contoh Data</span>
-              <span className="sm:hidden">Contoh Data</span>
-            </button>
-
-            <button
-              onClick={handleClearDemoData}
-              disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-950/70 hover:text-rose-300 text-slate-400 border border-slate-700 hover:border-rose-500/40 text-xs font-semibold transition cursor-pointer"
-              title="Bersihkan seluruh data contoh / demo dari Firestore"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Bersihkan Contoh</span>
-              <span className="sm:hidden">Bersihkan</span>
+              <span>Link Pemuat TBS</span>
             </button>
 
             <button
@@ -627,6 +618,74 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         </div>
       </div>
 
+      {/* Monitoring Urutan Ritase Otomatis per Afdeling */}
+      {afdelingRitBreakdown.length > 0 && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                <Truck className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <span>Rekap Urutan Ritase per Afdeling</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                    Otomatis Terpisah
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Pantau urutan rit pertama hingga terakhir khusus untuk setiap afdeling secara terpisah
+                </p>
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 font-mono">
+              Total {afdelingRitBreakdown.length} Afdeling Aktif
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {afdelingRitBreakdown.map((afdGroup) => (
+              <div
+                key={afdGroup.afdeling}
+                className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5 hover:border-slate-700 transition"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="font-bold text-xs sm:text-sm text-white">{afdGroup.afdeling}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      {afdGroup.totalRit} Rit
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-300">
+                      {afdGroup.totalTons.toFixed(2)} T
+                    </span>
+                  </div>
+                </div>
+
+                {/* Urutan Rit Pertama hingga Terakhir */}
+                <div className="flex flex-wrap gap-1.5">
+                  {afdGroup.trips.map((trip) => (
+                    <div
+                      key={trip.id}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono hover:border-emerald-500/40 transition"
+                      title={`${trip.truckNumber} • ${trip.driverName} • ${trip.tonnage} Ton (${formatDateIndo(trip.date)})`}
+                    >
+                      <span className="font-bold text-sky-300 bg-sky-950/90 px-1.5 py-0.5 rounded text-[10px] border border-sky-500/30">
+                        Rit {trip.ritNumber || 1}
+                      </span>
+                      <span className="text-white font-semibold">{trip.truckNumber}</span>
+                      <span className="text-emerald-400 font-bold">{trip.tonnage}T</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Grid Utama: Form Input Harian & Tabel Riwayat */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Kolom Kiri: Form Input Data Harian Sederhana (5/12) */}
@@ -705,31 +764,51 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 </div>
               </div>
 
-              {/* Nama Pemuat (Fitur Otomatis & Tambah Manual) */}
+              {/* Nama Pemuat (Fitur Otomatis Multi-Select & Tambah Manual) */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-emerald-400" />
-                    Nama Pemuat
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsPemuatManagerOpen(true)}
-                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 cursor-pointer"
-                    title="Tulis nama pemuat manual agar tersimpan di fitur otomatis"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>+ Tulis / Kelola Pemuat</span>
-                  </button>
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-emerald-400" />
+                      Nama Pemuat (Bisa &gt; 1 Orang)
+                    </label>
+                    {selectedPemuatList.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        {selectedPemuatList.length} Terpilih
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {selectedPemuatList.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, driverName: '' }))}
+                        className="text-[10px] text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                      >
+                        Bersihkan
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsPemuatManagerOpen(true)}
+                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 cursor-pointer"
+                      title="Tulis nama pemuat manual agar tersimpan di fitur otomatis"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>+ Tulis / Kelola Pemuat</span>
+                    </button>
+                  </div>
                 </div>
+
                 <input
                   type="text"
                   list="daily-pemuat-master-list"
-                  placeholder="Ketik nama atau pilih tombol di bawah..."
+                  placeholder="Klik tombol di bawah atau ketik (contoh: ANTON/DELFIN/YUVEN)..."
                   value={formData.driverName}
                   onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
                   required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm font-semibold focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500 font-mono"
                 />
                 <datalist id="daily-pemuat-master-list">
                   {pemuatMaster.map((p) => (
@@ -737,23 +816,30 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   ))}
                 </datalist>
 
-                {/* Tombol Cepat Otomatis Nama Pemuat */}
+                {/* Tombol Cepat Otomatis Multi-Select Nama Pemuat */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {pemuatMaster.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, driverName: p.name })}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
-                        formData.driverName === p.name
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
+                  {pemuatMaster.map((p) => {
+                    const isSelected = selectedPemuatList.includes(p.name.toUpperCase());
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleTogglePemuatName(p.name)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border flex items-center gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm shadow-emerald-500/20'
+                            : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        <span>{p.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  * Klik nama pemuat untuk memilih lebih dari satu (otomatis digabung dengan pemisah garis miring, cth: <strong>ANTON/DELFIN/YUVEN</strong>).
+                </p>
               </div>
 
               {/* Tonase (Ton) */}
@@ -824,6 +910,31 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Box Nomor Ritase Otomatis Khusus Afdeling Terpilih */}
+              <div className="p-3.5 bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-xl space-y-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-mono font-black text-xs">
+                      #{nextRitNumber}
+                    </span>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">
+                        Nomor Ritase Otomatis
+                      </span>
+                      <span className="text-xs font-bold text-white">
+                        Rit {nextRitNumber} &bull; {formData.afdeling || 'Afdeling'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                    {afdelingRitsOnDate.length} Rit Tercatat Hari Ini
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Sistem mendeteksi <strong>{formData.afdeling}</strong> dan otomatis mengalokasikan nomor ritase terpisah dari afdeling lainnya.
+                </p>
               </div>
 
               {/* Catatan Tambahan (Opsional) */}
@@ -1007,7 +1118,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                       className="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition shadow-sm space-y-2.5"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono font-bold text-xs">
                             <Truck className="w-3.5 h-3.5" />
                             {r.truckNumber}
@@ -1015,6 +1126,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                           <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                             <MapPin className="w-3 h-3 text-slate-500" />
                             {r.afdeling}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                            Rit {r.ritNumber || 1}
                           </span>
                         </div>
                         <div className="text-right">
@@ -1082,6 +1196,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
                         <th className="py-3 px-3 sm:px-4 font-semibold">Tgl</th>
+                        <th className="py-3 px-3 sm:px-4 font-semibold">Rit</th>
                         <th className="py-3 px-3 sm:px-4 font-semibold">Unit Truk</th>
                         <th className="py-3 px-3 sm:px-4 font-semibold">Pemuat</th>
                         <th className="py-3 px-3 sm:px-4 font-semibold">Afdeling</th>
@@ -1099,6 +1214,13 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                           {/* Tanggal */}
                           <td className="py-3 px-3 sm:px-4 whitespace-nowrap text-slate-300 font-medium text-xs">
                             {formatDateIndo(r.date)}
+                          </td>
+
+                          {/* Nomor Rit */}
+                          <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                              Rit {r.ritNumber || 1}
+                            </span>
                           </td>
 
                           {/* Unit Truk */}
@@ -1259,53 +1381,95 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 </div>
               </div>
 
-              {/* Nama Pemuat */}
+              {/* Nama Pemuat (Multi-Select) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-emerald-400" />
-                  Nama Pemuat
-                </label>
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-emerald-400" />
+                    Nama Pemuat (Bisa Lebih Dari 1 Orang)
+                  </label>
+                  {selectedEditPemuatList.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      {selectedEditPemuatList.length} Terpilih
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={editFormData.driverName}
                   onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
+                  placeholder="Contoh: ANTON/DELFIN/YUVEN"
                   required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
+                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition font-mono"
                 />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {pemuatMaster.map((p) => {
+                    const isSelected = selectedEditPemuatList.includes(p.name.toUpperCase());
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleToggleEditPemuatName(p.name)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border flex items-center gap-1 cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
+                            : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        <span>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Tonase (Ton) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                  Tonase (Ton)
-                </label>
-                <div className="relative">
+              {/* Nomor Ritase (Rit) & Afdeling */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Nomor Ritase */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5 text-sky-400" />
+                    Nomor Ritase (Rit)
+                  </label>
                   <input
                     type="number"
-                    step="0.01"
-                    min="0.1"
-                    max="50"
-                    value={editFormData.tonnage}
-                    onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
-                    required
-                    className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition"
+                    min="1"
+                    value={editFormData.ritNumber || 1}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        ritNumber: parseInt(e.target.value, 10) || 1,
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition"
                   />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
-                    TON
-                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Urutan rit khusus di {editFormData.afdeling}
+                  </p>
                 </div>
-                <div className="flex gap-1.5 mt-2">
-                  {[7.5, 8.0, 8.5, 9.0, 9.5].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setEditFormData({ ...editFormData, tonnage: preset as any })}
-                      className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/60 font-mono cursor-pointer"
-                    >
-                      {preset}T
-                    </button>
-                  ))}
+
+                {/* Tonase (Ton) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-emerald-400" />
+                    Tonase (Ton)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.1"
+                      max="50"
+                      value={editFormData.tonnage}
+                      onChange={(e) => setEditFormData({ ...editFormData, tonnage: e.target.value as any })}
+                      required
+                      className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
+                      TON
+                    </div>
+                  </div>
                 </div>
               </div>
 

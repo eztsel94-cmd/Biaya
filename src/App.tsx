@@ -17,6 +17,7 @@ import { ExcelImportModal } from './components/ExcelImportModal';
 import { UserRoleModal } from './components/UserRoleModal';
 import { DriverPortalView } from './components/DriverPortalView';
 import { PemuatPortalView } from './components/PemuatPortalView';
+import { SettingsView } from './components/SettingsView';
 import { findTruckFromUrlQuery } from './utils/driverLink';
 import {
   api,
@@ -35,6 +36,7 @@ import {
   Database,
   Radio,
   Zap,
+  Settings,
 } from 'lucide-react';
 
 export default function App() {
@@ -521,6 +523,8 @@ service cloud.firestore {
             initialFilterCategory={expensesInitialCategory}
           />
         )}
+
+        {activeTab === 'settings' && <SettingsView />}
       </main>
 
       {/* Footer */}
@@ -547,10 +551,10 @@ service cloud.firestore {
             </button>
             <span>•</span>
             <button
-              onClick={handleResetToDefault3Units}
-              className="hover:text-amber-400 transition flex items-center gap-1"
+              onClick={() => setActiveTab('settings')}
+              className="hover:text-emerald-400 transition flex items-center gap-1"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Reset Default 3 Unit
+              <Settings className="w-3.5 h-3.5" /> Pengaturan Firebase
             </button>
           </div>
         </div>

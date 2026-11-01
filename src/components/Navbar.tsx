@@ -15,11 +15,12 @@ import {
   User,
   RotateCcw,
   Users,
+  Settings,
 } from 'lucide-react';
 
 import { AppUser } from '../types/truck';
 
-export type NavTabType = 'daily_records' | 'pemuat_portal' | 'dashboard' | 'trucks' | 'expenses';
+export type NavTabType = 'daily_records' | 'pemuat_portal' | 'dashboard' | 'trucks' | 'expenses' | 'settings';
 
 interface NavbarProps {
   activeTab: NavTabType;
@@ -148,6 +149,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                   {expenseCount}
                 </span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all ${
+                  activeTab === 'settings'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Settings className="w-4 h-4 text-emerald-400" />
+                <span>Pengaturan</span>
               </button>
             </nav>
 
@@ -415,14 +428,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => {
                   setIsMobileMenuOpen(false);
-                  onResetData();
+                  setActiveTab('settings');
                 }}
-                className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-left hover:bg-rose-950/40 hover:border-rose-500/30 transition"
+                className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-left hover:bg-emerald-950/40 hover:border-emerald-500/30 transition"
               >
-                <RotateCcw className="w-5 h-5 text-amber-400 shrink-0" />
+                <Settings className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div>
-                  <span className="text-xs font-bold text-slate-200 block">Reset Demo</span>
-                  <span className="text-[10px] text-slate-400">Kembali 3 Unit Awal</span>
+                  <span className="text-xs font-bold text-slate-200 block">Pengaturan</span>
+                  <span className="text-[10px] text-slate-400">Konfigurasi Firebase</span>
                 </div>
               </button>
             </div>
@@ -513,6 +526,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-400" />
                   <span>Daftar Seluruh Biaya Armada</span>
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono">Buka &rarr;</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('settings');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold ${
+                  activeTab === 'settings' ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-emerald-400" />
+                  <span>Pengaturan Firebase</span>
                 </span>
                 <span className="text-[10px] text-emerald-400 font-mono">Buka &rarr;</span>
               </button>
