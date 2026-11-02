@@ -114,7 +114,7 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
               Armada Truk TBS ({trucks.length} Unit)
             </h1>
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              Harbor Homes
+              Traksi KPU
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

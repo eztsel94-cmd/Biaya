@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory, FilterOptions, AppUser } from '../types/truck';
-import { formatRupiah, formatNumber, formatDateIndo, exportExpensesToCSV, exportExpensesToExcel } from '../utils/formatters';
+import { formatRupiah, formatNumber, formatDateIndo, exportExpensesToCSV, exportExpensesToExcel, getTodayWIB } from '../utils/formatters';
 import { CATEGORIES, CATEGORY_COLORS } from '../data/initialData';
 import {
   FileText,
@@ -45,7 +45,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   onOpenExcelImport,
 }) => {
   // Form state for creating new expense
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayWIB();
   const [formData, setFormData] = useState({
     date: todayStr,
     truckId: trucks[0]?.id || '',
@@ -182,7 +182,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
               Catatan Biaya Operasional Truk TBS
             </h1>
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              Formulir & Tabel
+              Traksi KPU
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">

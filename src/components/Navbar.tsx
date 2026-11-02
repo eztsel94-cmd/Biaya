@@ -62,16 +62,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center justify-between h-14 sm:h-16">
             {/* Logo & Company Name */}
             <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold ring-1 ring-emerald-400/30 shrink-0">
-                <Truck className="w-4 h-4 sm:w-5 sm:h-5" />
+              <div className="h-9 sm:h-11 px-2 py-1 rounded-xl bg-white flex items-center justify-center shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-400/40 shrink-0 overflow-hidden">
+                <img
+                  src="/assets/aistudio/images_70037338.jpeg"
+                  alt="Logo Traksi KPU - Kalimantan Plantation Unit"
+                  className="h-full w-auto object-contain"
+                />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <span className="font-black text-sm sm:text-base lg:text-lg tracking-tight text-white truncate">
-                    Truk TBS
+                    Traksi KPU
                   </span>
                   <span className="hidden sm:inline font-bold text-sm text-slate-300">
-                    · Catatan Harian
+                    · Operasional TBS
                   </span>
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 rounded border border-emerald-500/30 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -79,7 +83,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 hidden lg:block truncate">
-                  Pencatatan Rit, Tonase, Supir & Afdeling Kebun Kelapa Sawit
+                  Kalimantan Plantation Unit — Ritase, Tonase, Supir &amp; Biaya Armada TBS
                 </p>
               </div>
             </div>
@@ -360,13 +364,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Header Drawer */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
-                  <Truck className="w-4 h-4" />
+                <div className="h-9 px-2 py-1 rounded-xl bg-white border border-emerald-500/30 flex items-center justify-center overflow-hidden shrink-0">
+                  <img
+                    src="/assets/aistudio/images_70037338.jpeg"
+                    alt="Logo Traksi KPU"
+                    className="h-full w-auto object-contain"
+                  />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Menu & Aksi Sistem Truk TBS</h3>
+                  <h3 className="text-sm font-bold text-white">Menu &amp; Aksi Traksi KPU</h3>
                   <p className="text-[11px] text-slate-400">
-                    Akses Cepat Pengelolaan dari Layar HP
+                    Kalimantan Plantation Unit • Akses Cepat HP
                   </p>
                 </div>
               </div>

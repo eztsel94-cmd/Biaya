@@ -242,13 +242,17 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
       <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 shadow-lg">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold">
-              <Truck className="w-5 h-5" />
+            <div className="h-10 px-2 py-1 rounded-xl bg-white border border-emerald-500/30 flex items-center justify-center shrink-0 overflow-hidden">
+              <img
+                src="/assets/aistudio/images_70037338.jpeg"
+                alt="Logo Traksi KPU"
+                className="h-full w-auto object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs uppercase font-extrabold tracking-wider text-emerald-400">
-                  PORTAL SUPIR DT
+                  TRAKSI KPU • PORTAL SUPIR
                 </span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-medium">
                   Unit Terisolasi
@@ -677,8 +681,13 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
       {/* Driver Portal Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-400 mt-auto">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div>
-            <span className="font-bold text-white">Harbor Homes</span> • Portal Supir TBS Sawit ({truck.code})
+          <div className="flex items-center gap-2">
+            <img
+              src="/assets/aistudio/images_70037338.jpeg"
+              alt="Logo Traksi KPU"
+              className="h-5 w-auto rounded bg-white px-1 py-0.5 object-contain"
+            />
+            <span className="font-bold text-white">Traksi KPU</span> • Portal Supir TBS Sawit ({truck.code})
           </div>
           <div className="flex items-center gap-3">
             <button

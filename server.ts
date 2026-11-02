@@ -33,55 +33,55 @@ const DEFAULT_SYSTEM_USERS: AppUser[] = [
     email: 'eztsel94@gmail.com',
     role: 'admin',
     roleLabel: 'Admin / Kasir Kebun',
-    department: 'Divisi Logistik & Keuangan TBS',
+    department: 'Traksi KPU - Divisi Logistik & Keuangan TBS',
   },
   {
     id: 'usr-admin-2',
     name: 'Muhammad Rizki Aditya (Admin Operasional)',
-    email: 'rizki.aditya@harborhomes.com',
+    email: 'rizki.aditya@traksikpu.com',
     role: 'admin',
     roleLabel: 'Admin / Kasir Kebun',
-    department: 'Divisi Logistik & Keuangan TBS',
+    department: 'Traksi KPU - Divisi Logistik & Keuangan TBS',
   },
   {
     id: 'usr-driver-truck-1',
     name: 'Budi Santoso (Supir Unit 01)',
-    email: 'budi.santoso@harborhomes.com',
+    email: 'budi.santoso@traksikpu.com',
     role: 'operator',
     roleLabel: 'Supir DT (Unit 01)',
-    department: 'Armada Truk TBS - BM 8120 TBS',
+    department: 'Armada Truk TBS - Traksi KPU',
   },
   {
     id: 'usr-driver-truck-2',
     name: 'Agus Supriyadi (Supir Unit 90)',
-    email: 'agus.supriyadi@harborhomes.com',
+    email: 'agus.supriyadi@traksikpu.com',
     role: 'operator',
     roleLabel: 'Supir DT (Unit 90)',
-    department: 'Armada Truk TBS - BM 8456 TBS',
+    department: 'Armada Truk TBS - Traksi KPU',
   },
   {
     id: 'usr-driver-truck-3',
     name: 'Hendra Wijaya (Supir Unit 03)',
-    email: 'hendra.wijaya@harborhomes.com',
+    email: 'hendra.wijaya@traksikpu.com',
     role: 'operator',
     roleLabel: 'Supir DT (Unit 03)',
-    department: 'Armada Truk TBS - BM 9312 TBS',
+    department: 'Armada Truk TBS - Traksi KPU',
   },
   {
     id: 'usr-operator-1',
     name: 'Suryanto (Mandor Afdeling)',
-    email: 'mandor.suryanto@harborhomes.com',
+    email: 'mandor.suryanto@traksikpu.com',
     role: 'operator',
     roleLabel: 'Operator / Mandor Lapangan',
-    department: 'Operasional Kebun Rayon 2',
+    department: 'Operasional Kebun - Traksi KPU',
   },
   {
     id: 'usr-viewer-1',
     name: 'Iwan Prasetyo (Pimpinan / Auditor)',
-    email: 'auditor.iwan@harborhomes.com',
+    email: 'auditor.iwan@traksikpu.com',
     role: 'viewer',
     roleLabel: 'Auditor (Hanya Lihat)',
-    department: 'Manajemen Eksekutif',
+    department: 'Manajemen Eksekutif - Traksi KPU',
   },
 ];
 
@@ -496,7 +496,7 @@ function authenticateUser(req: AuthenticatedRequest, _res: Response, next: NextF
   const userId = req.headers['x-user-id'] as string;
   const userRole = (req.headers['x-user-role'] as string) || 'admin';
   const userName = (req.headers['x-user-name'] as string) || 'Admin User';
-  const userEmail = (req.headers['x-user-email'] as string) || 'admin@harborhomes.com';
+  const userEmail = (req.headers['x-user-email'] as string) || 'admin@traksikpu.com';
 
   req.user = {
     id: userId || 'usr-admin-1',
@@ -844,7 +844,7 @@ app.post('/api/trucks', requireAdminRole, (req: AuthenticatedRequest, res: Respo
     newDriverUser = {
       id: `usr-driver-${newTruck.id}`,
       name: `${driverName} (Supir ${code})`,
-      email: `${slug || 'supir'}@harborhomes.com`,
+      email: `${slug || 'supir'}@traksikpu.com`,
       role: 'operator', // Otomatis selaku supir saja
       roleLabel: `Supir DT (${code})`,
       department: `Armada Truk TBS - ${plateNumber}`,
@@ -970,7 +970,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Harbor Homes TBS Server running on http://0.0.0.0:${PORT} [${isProduction ? 'prod' : 'dev'}]`);
+    console.log(`🚀 Traksi KPU TBS Server running on http://0.0.0.0:${PORT} [${isProduction ? 'prod' : 'dev'}]`);
   });
 }
 

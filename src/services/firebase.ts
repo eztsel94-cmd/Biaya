@@ -459,21 +459,61 @@ export function subscribeToDailyRecords(
       q,
       (snapshot) => {
         setPermissionError(null);
-        const items: DailyRecord[] = [];
+        const rawItems: DailyRecord[] = [];
         snapshot.forEach((docSnapshot) => {
           const data = docSnapshot.data();
-          items.push({
+          rawItems.push({
             id: docSnapshot.id,
             date: data.date || new Date().toISOString().split("T")[0],
             truckNumber: data.truckNumber || "DT -",
             driverName: data.driverName || "-",
             tonnage: typeof data.tonnage === "number" ? data.tonnage : parseFloat(data.tonnage) || 0,
-            afdeling: data.afdeling || "Afdeling 1",
+            afdeling: (data.afdeling || "Afdeling 1").trim(),
             ritNumber: typeof data.ritNumber === "number" ? data.ritNumber : parseInt(data.ritNumber, 10) || undefined,
             notes: data.notes || "",
             createdAt: data.createdAt,
           });
         });
+
+        // Urutkan nomor Ritase (Rit 1, Rit 2, dst.) secara berurutan per Tanggal & per Afdeling
+        const groupMap = new Map<string, DailyRecord[]>();
+        rawItems.forEach((item) => {
+          const key = `${item.date}__${(item.afdeling || "Afdeling 1").trim().toLowerCase()}`;
+          if (!groupMap.has(key)) groupMap.set(key, []);
+          groupMap.get(key)!.push(item);
+        });
+
+        const getCreatedMillis = (ts: any): number => {
+          if (!ts) return 0;
+          if (typeof ts.toMillis === "function") return ts.toMillis();
+          if (typeof ts.seconds === "number") return ts.seconds * 1000;
+          const parsed = Date.parse(String(ts));
+          return isNaN(parsed) ? 0 : parsed;
+        };
+
+        const normalizedRitById = new Map<string, number>();
+        groupMap.forEach((groupList) => {
+          const sorted = [...groupList].sort((a, b) => {
+            const timeA = getCreatedMillis(a.createdAt);
+            const timeB = getCreatedMillis(b.createdAt);
+            if (timeA !== timeB && timeA > 0 && timeB > 0) {
+              return timeA - timeB;
+            }
+            const ritA = a.ritNumber || 9999;
+            const ritB = b.ritNumber || 9999;
+            if (ritA !== ritB) return ritA - ritB;
+            return a.id.localeCompare(b.id);
+          });
+          sorted.forEach((rec, idx) => {
+            normalizedRitById.set(rec.id, idx + 1);
+          });
+        });
+
+        const items = rawItems.map((item) => ({
+          ...item,
+          ritNumber: normalizedRitById.get(item.id) ?? item.ritNumber ?? 1,
+        }));
+
         onData(items);
       },
       (error) => {

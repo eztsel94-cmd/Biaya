@@ -155,7 +155,7 @@ export function exportExpensesToCSV(expenses: ExpenseRecord[], trucks: TruckUnit
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement('a');
   link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Laporan_Biaya_Truk_TBS_Harbor_Homes_${getTodayWIB()}.csv`);
+  link.setAttribute('download', `Laporan_Biaya_Truk_TBS_Traksi_KPU_${getTodayWIB()}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

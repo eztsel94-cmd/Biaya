@@ -108,7 +108,7 @@ export const DriverQrCodeModal: React.FC<DriverQrCodeModalProps> = ({
       ctx.fillStyle = '#10b981'; // Emerald 400
       ctx.font = 'bold 15px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('SISTEM OPERASIONAL TBS HARBOR HOMES', canvas.width / 2, 48);
+      ctx.fillText('SISTEM OPERASIONAL TBS TRAKSI KPU', canvas.width / 2, 48);
 
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 24px sans-serif';
@@ -332,8 +332,12 @@ export const DriverQrCodeModal: React.FC<DriverQrCodeModalProps> = ({
                     className="w-56 h-56 sm:w-64 sm:h-64 object-contain rounded-lg"
                   />
                   {/* Badge logo overlay in center */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/95 p-1.5 rounded-lg shadow-md border border-emerald-500">
-                    <Truck className="w-6 h-6 text-emerald-600" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-1.5 rounded-lg shadow-md border border-emerald-500">
+                    <img
+                      src="/assets/aistudio/images_70037338.jpeg"
+                      alt="Traksi KPU"
+                      className="h-7 w-auto object-contain"
+                    />
                   </div>
                 </div>
 

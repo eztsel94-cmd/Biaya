@@ -605,14 +605,18 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
-                <Truck className="w-6 h-6" />
-              </span>
+              <div className="w-11 h-11 rounded-xl bg-white p-1 flex items-center justify-center border border-emerald-500/30 shadow-sm overflow-hidden shrink-0">
+                <img
+                  src="/assets/aistudio/images_70037338.jpeg"
+                  alt="Logo Traksi KPU"
+                  className="w-full h-full object-contain"
+                />
+              </div>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                 Sistem Catatan Harian Truk TBS
               </h1>
               <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                PKS & Kebun Kelapa Sawit
+                Traksi KPU &bull; Kalimantan Plantation Unit
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-2">
@@ -778,17 +782,19 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
                 {/* Urutan Rit Pertama hingga Terakhir */}
                 <div className="flex flex-wrap gap-1.5">
-                  {afdGroup.trips.map((trip) => (
+                  {afdGroup.trips.map((trip, idx) => (
                     <div
                       key={trip.id}
                       className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono hover:border-emerald-500/40 transition"
                       title={`${trip.truckNumber} • ${trip.driverName} • ${trip.tonnage} Ton (${formatDateIndo(trip.date)})`}
                     >
                       <span className="font-bold text-sky-300 bg-sky-950/90 px-1.5 py-0.5 rounded text-[10px] border border-sky-500/30">
-                        Rit {trip.ritNumber || 1}
+                        Rit {trip.ritNumber || idx + 1}
                       </span>
                       <span className="text-white font-semibold">{trip.truckNumber}</span>
-                      <span className="text-emerald-400 font-bold">{trip.tonnage}T</span>
+                      <span className="text-slate-400">&bull;</span>
+                      <span className="text-emerald-300 font-semibold">{trip.driverName}</span>
+                      <span className="text-emerald-400 font-bold">({trip.tonnage}T)</span>
                     </div>
                   ))}
                 </div>
@@ -1671,7 +1677,20 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 <input
                   type="text"
                   value={editFormData.afdeling}
-                  onChange={(e) => setEditFormData({ ...editFormData, afdeling: e.target.value })}
+                  onChange={(e) => {
+                    const newAfd = e.target.value;
+                    const existingInTargetAfd = records.filter(
+                      (r) =>
+                        r.id !== recordToEdit.id &&
+                        r.date === editFormData.date &&
+                        r.afdeling.trim().toLowerCase() === newAfd.trim().toLowerCase()
+                    );
+                    setEditFormData({
+                      ...editFormData,
+                      afdeling: newAfd,
+                      ritNumber: existingInTargetAfd.length + 1,
+                    });
+                  }}
                   required
                   className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
                 />
@@ -1680,7 +1699,19 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     <button
                       key={afd}
                       type="button"
-                      onClick={() => setEditFormData({ ...editFormData, afdeling: afd })}
+                      onClick={() => {
+                        const existingInTargetAfd = records.filter(
+                          (r) =>
+                            r.id !== recordToEdit.id &&
+                            r.date === editFormData.date &&
+                            r.afdeling.trim().toLowerCase() === afd.trim().toLowerCase()
+                        );
+                        setEditFormData({
+                          ...editFormData,
+                          afdeling: afd,
+                          ritNumber: existingInTargetAfd.length + 1,
+                        });
+                      }}
                       className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
                         editFormData.afdeling === afd
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'

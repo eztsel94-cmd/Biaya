@@ -575,10 +575,15 @@ service cloud.firestore {
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 mt-12 mb-16 md:mb-0 text-center text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-white">Harbor Homes</span>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/assets/aistudio/images_70037338.jpeg"
+              alt="Logo Traksi KPU"
+              className="h-6 w-auto rounded bg-white px-1.5 py-0.5 object-contain"
+            />
+            <span className="font-bold text-white">Traksi KPU</span>
             <span>—</span>
-            <span>Sistem Laporan Biaya Truk TBS Real-Time ({trucks.length} Unit Aktif)</span>
+            <span>Kalimantan Plantation Unit • Sistem Operasional Truk TBS ({trucks.length} Unit Aktif)</span>
           </div>
           <div className="flex items-center gap-3">
             <button

@@ -124,22 +124,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Welcome & Quick Info Bar */}
       <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 p-6 rounded-2xl border border-slate-800 shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Armada TBS Siap Operasi
-              </span>
-              <span className="text-xs text-slate-400">
-                Data Aktif: <strong className="text-slate-200">{truckCount} Unit Truk</strong>
-              </span>
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="hidden sm:flex h-16 px-3 py-1.5 rounded-2xl bg-white items-center justify-center shadow-lg shrink-0">
+              <img
+                src="/assets/aistudio/images_70037338.jpeg"
+                alt="Logo Traksi KPU"
+                className="h-full w-auto object-contain"
+              />
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Dashboard Biaya Truk TBS Harbor Homes
-            </h1>
-            <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-              Pemantauan pengeluaran armada pengangkut Tandan Buah Segar kelapa sawit secara real-time mencakup Fuel, Lubricant, Sparepart, Tyre & Tubes, Workshop, BPJS, Jamsostek, Potongan Mangkir, Beras, dan Supir.
-            </p>
+            <div>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Traksi KPU • Kalimantan Plantation Unit
+                </span>
+                <span className="text-xs text-slate-400">
+                  Data Aktif: <strong className="text-slate-200">{truckCount} Unit Armada</strong>
+                </span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                Dashboard Biaya Truk TBS Traksi KPU
+              </h1>
+              <p className="text-sm text-slate-300 mt-1 max-w-2xl">
+                Pemantauan pengeluaran armada pengangkut Tandan Buah Segar kelapa sawit secara real-time mencakup Fuel, Lubricant, Sparepart, Tyre &amp; Tubes, Workshop, BPJS, Jamsostek, Potongan Mangkir, Beras, dan Supir.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2.5 self-start md:self-auto">

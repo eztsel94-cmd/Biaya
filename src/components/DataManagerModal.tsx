@@ -179,7 +179,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup_harbor_homes_truk_tbs_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `backup_traksi_kpu_truk_tbs_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     showNotice('File backup JSON berhasil diunduh.');
   };

@@ -765,8 +765,12 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           <div className="flex items-center justify-between h-16">
             {/* Branding */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold ring-1 ring-emerald-400/30">
-                <Truck className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-white p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 overflow-hidden shrink-0">
+                <img
+                  src="/assets/aistudio/images_70037338.jpeg"
+                  alt="Logo Traksi KPU"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -774,11 +778,11 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     Portal Pemuat TBS
                   </span>
                   <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30">
-                    Lapangan
+                    Traksi KPU
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 hidden sm:block">
-                  Catatan Ritase & Tonase TBS Kebun
+                  Catatan Ritase & Tonase TBS Kebun &bull; Kalimantan Plantation Unit
                 </p>
               </div>
             </div>
@@ -1856,25 +1860,30 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                         <span>Urutan Ritase per Afdeling:</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {Array.from(afdMap.entries()).map(([afdName, tList]) => {
-                          const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
-                          const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
-                          return (
-                            <div key={afdName} className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1.5">
-                              <div className="flex items-center justify-between gap-2 font-bold text-slate-200">
-                                <span>{afdName}</span>
-                                <span className="text-emerald-400 font-mono text-[11px]">{tList.length} Rit ({totalTons.toFixed(2)}T)</span>
+                        {Array.from(afdMap.entries())
+                          .sort(([a], [b]) => a.localeCompare(b, 'id', { numeric: true }))
+                          .map(([afdName, tList]) => {
+                            const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
+                            const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
+                            return (
+                              <div key={afdName} className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1.5">
+                                <div className="flex items-center justify-between gap-2 font-bold text-slate-200">
+                                  <span>{afdName}</span>
+                                  <span className="text-emerald-400 font-mono text-[11px]">{tList.length} Rit ({totalTons.toFixed(2)}T)</span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  {sortedList.map((t, idx) => (
+                                    <span key={t.id} className="text-[10px] px-2 py-1 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono flex items-center justify-between gap-1.5">
+                                      <span>
+                                        <strong className="text-sky-400">Rit {idx + 1}:</strong> {t.truckNumber} &bull; <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                      </span>
+                                      <span className="text-white font-bold shrink-0">({t.tonnage}T)</span>
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="flex flex-wrap gap-1">
-                                {sortedList.map((t) => (
-                                  <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono">
-                                    Rit {t.ritNumber || 1}: {t.truckNumber} ({t.tonnage}T)
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     </div>
                   );
@@ -2228,7 +2237,20 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 <label className="block font-semibold text-slate-300 mb-1">Afdeling:</label>
                 <select
                   value={editFormData.afdeling}
-                  onChange={(e) => setEditFormData({ ...editFormData, afdeling: e.target.value })}
+                  onChange={(e) => {
+                    const newAfd = e.target.value;
+                    const existingInTargetAfd = records.filter(
+                      (r) =>
+                        r.id !== recordToEdit.id &&
+                        r.date === editFormData.date &&
+                        r.afdeling.trim().toLowerCase() === newAfd.trim().toLowerCase()
+                    );
+                    setEditFormData({
+                      ...editFormData,
+                      afdeling: newAfd,
+                      ritNumber: existingInTargetAfd.length + 1,
+                    });
+                  }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                 >
                   {QUICK_AFDELINGS.map((afd) => (
@@ -2368,7 +2390,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
       {/* FOOTER */}
       <footer className="mt-auto border-t border-slate-900 py-4 text-center text-xs text-slate-500">
-        <p>Portal Lapangan Catatan Harian Truk TBS &bull; Terhubung Real-Time ke Firebase Firestore</p>
+        <p>Portal Lapangan Catatan Harian Truk TBS &bull; Traksi KPU (Kalimantan Plantation Unit)</p>
       </footer>
     </div>
   );
