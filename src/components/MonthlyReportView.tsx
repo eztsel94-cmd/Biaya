@@ -24,7 +24,7 @@ import {
 import * as XLSX from 'xlsx';
 import { TruckUnit, ExpenseRecord, ExpenseCategory } from '../types/truck';
 import { CATEGORIES } from '../data/initialData';
-import { formatRupiah as formatIDR } from '../utils/formatters';
+import { formatRupiah as formatIDR, getWIBDateParts } from '../utils/formatters';
 
 interface MonthlyReportViewProps {
   trucks: TruckUnit[];
@@ -76,7 +76,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   trucks,
   expenses,
 }) => {
-  const currentYear = new Date().getFullYear().toString();
+  const currentYear = getWIBDateParts().year.toString();
 
   // Mode perbandingan: berdasarkan UNIT DT atau KATEGORI BIAYA
   const [groupBy, setGroupBy] = useState<'UNIT' | 'CATEGORY'>('UNIT');

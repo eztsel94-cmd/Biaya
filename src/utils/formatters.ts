@@ -1,6 +1,74 @@
 import { ExpenseRecord, TruckUnit } from '../types/truck';
 import * as XLSX from 'xlsx';
 
+/**
+ * Mengambil komponen tanggal berdasarkan Waktu Indonesia Barat (WIB / Asia/Jakarta, UTC+7)
+ * sehingga tanggal tidak pernah terlambat 7 jam akibat waktu UTC (toISOString).
+ */
+export function getWIBDateParts(date: Date = new Date()): {
+  year: number;
+  month: number; // 1 - 12
+  monthIndex: number; // 0 - 11
+  day: number; // 1 - 31
+  dateStr: string; // YYYY-MM-DD
+} {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    if (y && m && d) {
+      const yearNum = parseInt(y, 10);
+      const monthNum = parseInt(m, 10);
+      const dayNum = parseInt(d, 10);
+      return {
+        year: yearNum,
+        month: monthNum,
+        monthIndex: monthNum - 1,
+        day: dayNum,
+        dateStr: `${y}-${m}-${d}`,
+      };
+    }
+  } catch {
+    // Fallback perhitungan manual UTC+7 (WIB)
+  }
+
+  const wibMs = date.getTime() + 7 * 60 * 60 * 1000;
+  const wibDate = new Date(wibMs);
+  const year = wibDate.getUTCFullYear();
+  const month = wibDate.getUTCMonth() + 1;
+  const day = wibDate.getUTCDate();
+  const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return {
+    year,
+    month,
+    monthIndex: month - 1,
+    day,
+    dateStr,
+  };
+}
+
+/**
+ * Mengembalikan string tanggal hari ini (YYYY-MM-DD) sesuai Waktu Indonesia Barat (WIB)
+ */
+export function getTodayWIB(): string {
+  return getWIBDateParts(new Date()).dateStr;
+}
+
+/**
+ * Mengembalikan string tanggal N hari yang lalu (YYYY-MM-DD) sesuai Waktu Indonesia Barat (WIB)
+ */
+export function getDaysAgoWIB(days: number): string {
+  const target = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return getWIBDateParts(target).dateStr;
+}
+
 export function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -16,7 +84,17 @@ export function formatNumber(val: number): string {
 export function formatDateIndo(dateStr: string, format: 'short' | 'long' = 'short'): string {
   if (!dateStr) return '-';
   try {
-    const date = new Date(dateStr);
+    const clean = dateStr.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      const [y, m, d] = clean.split('-').map(Number);
+      const localDate = new Date(y, m - 1, d);
+      return localDate.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: format === 'short' ? 'short' : 'long',
+        year: 'numeric',
+      });
+    }
+    const date = new Date(clean);
     if (isNaN(date.getTime())) return dateStr;
 
     return date.toLocaleDateString('id-ID', {
@@ -49,7 +127,7 @@ export function exportExpensesToExcel(expenses: ExpenseRecord[], trucks: TruckUn
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Laporan_Biaya_TBS');
-  XLSX.writeFile(wb, `Laporan_Biaya_Truk_TBS_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, `Laporan_Biaya_Truk_TBS_${getTodayWIB()}.xlsx`);
 }
 
 export function exportExpensesToCSV(expenses: ExpenseRecord[], trucks: TruckUnit[]): void {
@@ -77,7 +155,7 @@ export function exportExpensesToCSV(expenses: ExpenseRecord[], trucks: TruckUnit
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement('a');
   link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Laporan_Biaya_Truk_TBS_Harbor_Homes_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute('download', `Laporan_Biaya_Truk_TBS_Harbor_Homes_${getTodayWIB()}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

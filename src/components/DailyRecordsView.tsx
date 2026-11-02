@@ -46,6 +46,7 @@ import {
 import { SharePemuatModal } from './SharePemuatModal';
 import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl } from '../utils/driverLink';
+import { getTodayWIB, getDaysAgoWIB } from '../utils/formatters';
 
 const QUICK_TRUCKS: string[] = [];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
@@ -83,16 +84,49 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
     return () => unsub();
   }, []);
 
-  // Form State Input Baru (Bersih, siap pakai untuk operasional harian)
-  const todayStr = new Date().toISOString().split('T')[0];
-  const [formData, setFormData] = useState<NewDailyRecord>({
-    date: todayStr,
+  // Form State Input Baru sesuai Waktu Indonesia Barat (WIB / UTC+7)
+  const [todayStr, setTodayStr] = useState<string>(() => getTodayWIB());
+  const [formData, setFormData] = useState<NewDailyRecord>(() => ({
+    date: getTodayWIB(),
     truckNumber: trucks.length > 0 ? trucks[0].code : '',
     driverName: '',
     tonnage: '' as any,
     afdeling: 'Afdeling 1',
     notes: '',
-  });
+  }));
+
+  // Sinkronisasi otomatis tanggal WIB secara real-time walaupun tidak ada aktivitas pengangkutan
+  useEffect(() => {
+    const syncWIBDate = () => {
+      const currentWIB = getTodayWIB();
+      setTodayStr((prevToday) => {
+        if (prevToday !== currentWIB) {
+          setFormData((prevForm) => ({
+            ...prevForm,
+            date: prevForm.date === prevToday ? currentWIB : prevForm.date,
+          }));
+          return currentWIB;
+        }
+        return prevToday;
+      });
+    };
+
+    syncWIBDate();
+    const intervalId = window.setInterval(syncWIBDate, 30000);
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        syncWIBDate();
+      }
+    };
+    window.addEventListener('focus', syncWIBDate);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', syncWIBDate);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, []);
 
   // Sinkronkan pilihan awal Nomor Unit Truk dengan Armada yang terdata
   useEffect(() => {
@@ -474,10 +508,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         return false;
       }
       if (filterDateRange === '7DAYS') {
-        const d = new Date(r.date);
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        if (d < sevenDaysAgo) return false;
+        const sevenDaysAgo = getDaysAgoWIB(7);
+        if (r.date < sevenDaysAgo) return false;
       }
       if (filterDateRange === 'THIS_MONTH') {
         const curMonth = todayStr.substring(0, 7); // YYYY-MM

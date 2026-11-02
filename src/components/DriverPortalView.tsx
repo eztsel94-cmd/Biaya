@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory, AppUser } from '../types/truck';
-import { formatRupiah, formatDateIndo } from '../utils/formatters';
+import { formatRupiah, formatDateIndo, getWIBDateParts } from '../utils/formatters';
 import { CATEGORIES, CATEGORY_COLORS } from '../data/initialData';
 import { getDriverPortalUrl, getWhatsAppShareUrl } from '../utils/driverLink';
 import {
@@ -87,7 +87,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
 
   // Available years dynamically from unitExpenses + standard recent years
   const availableYears = useMemo(() => {
-    const currentYear = new Date().getFullYear();
+    const currentYear = getWIBDateParts().year;
     const yearSet = new Set<number>([currentYear, currentYear - 1, currentYear - 2, currentYear - 3]);
     unitExpenses.forEach((e) => {
       const y = new Date(e.date).getFullYear();
@@ -122,9 +122,9 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
 
   // Current month cost for this truck
   const currentMonthCost = useMemo(() => {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
+    const wib = getWIBDateParts();
+    const currentYear = wib.year;
+    const currentMonth = wib.monthIndex;
     return unitExpenses
       .filter((e) => {
         const d = new Date(e.date);

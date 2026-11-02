@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { ExpenseCategory, TruckUnit } from '../types/truck';
 import { CATEGORIES } from '../data/initialData';
+import { getTodayWIB } from './formatters';
 
 export interface ParsedExpenseItem {
   id: string;
@@ -342,13 +343,16 @@ export function parseAmount(val: any): number {
  * Clean & parse date string to YYYY-MM-DD
  */
 export function parseDate(val: any): string {
-  if (!val) return new Date().toISOString().split('T')[0];
+  if (!val) return getTodayWIB();
 
   if (typeof val === 'number' && val > 30000 && val < 60000) {
     const excelEpoch = new Date(1899, 11, 30);
     const dateObj = new Date(excelEpoch.getTime() + val * 86400000);
     if (!isNaN(dateObj.getTime())) {
-      return dateObj.toISOString().split('T')[0];
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
   }
 
@@ -379,10 +383,13 @@ export function parseDate(val: any): string {
 
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().split('T')[0];
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
-  return new Date().toISOString().split('T')[0];
+  return getTodayWIB();
 }
 
 export interface ParseFreeformOptions {
@@ -439,7 +446,7 @@ export function parseFreeformNotes(
   let activeTruck: TruckUnit | null = null;
   let activeRawUnitCode: string | null = null;
   let activeNonDtCode: string | null = null;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayWIB();
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];

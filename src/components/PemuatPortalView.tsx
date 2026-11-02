@@ -48,6 +48,7 @@ import {
 } from '../services/firebase';
 import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl } from '../utils/driverLink';
+import { getTodayWIB, getWIBDateParts, getDaysAgoWIB } from '../utils/formatters';
 
 const QUICK_TRUCKS: string[] = [];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
@@ -111,25 +112,59 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   // Mode Tampilan: Kalender Bulanan Interaktif vs Tabel Riwayat
   const [viewMode, setViewMode] = useState<'calendar' | 'table'>('calendar');
 
-  // State Navigasi Kalender
-  const initialCalendarDate = new Date();
-  const [calendarYear, setCalendarYear] = useState<number>(initialCalendarDate.getFullYear());
-  const [calendarMonth, setCalendarMonth] = useState<number>(initialCalendarDate.getMonth()); // 0 = Jan, 11 = Des
+  // State Tanggal Hari Ini & Navigasi Kalender sesuai Waktu Indonesia Barat (WIB / UTC+7)
+  const [todayStr, setTodayStr] = useState<string>(() => getTodayWIB());
+  const [calendarYear, setCalendarYear] = useState<number>(() => getWIBDateParts().year);
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => getWIBDateParts().monthIndex); // 0 = Jan, 11 = Des
 
   // State Modal Detail per Tanggal & Pencarian Rincian
   const [selectedDateForDetail, setSelectedDateForDetail] = useState<string | null>(null);
   const [modalSearchQuery, setModalSearchQuery] = useState<string>('');
 
   // Form State Input Baru
-  const todayStr = new Date().toISOString().split('T')[0];
-  const [formData, setFormData] = useState<NewDailyRecord>({
-    date: todayStr,
+  const [formData, setFormData] = useState<NewDailyRecord>(() => ({
+    date: getTodayWIB(),
     truckNumber: trucks.length > 0 ? trucks[0].code : '',
     driverName: initialPemuatName || '',
     tonnage: '' as any,
     afdeling: 'Afdeling 1',
     notes: '',
-  });
+  }));
+
+  // Sinkronisasi otomatis tanggal WIB secara real-time (walaupun tidak ada pengangkutan / halaman dibiarkan terbuka)
+  useEffect(() => {
+    const syncWIBDate = () => {
+      const wib = getWIBDateParts();
+      setTodayStr((prevToday) => {
+        if (prevToday !== wib.dateStr) {
+          setCalendarYear(wib.year);
+          setCalendarMonth(wib.monthIndex);
+          setFormData((prevForm) => ({
+            ...prevForm,
+            date: prevForm.date === prevToday ? wib.dateStr : prevForm.date,
+          }));
+          return wib.dateStr;
+        }
+        return prevToday;
+      });
+    };
+
+    syncWIBDate();
+    const intervalId = window.setInterval(syncWIBDate, 30000);
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        syncWIBDate();
+      }
+    };
+    window.addEventListener('focus', syncWIBDate);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', syncWIBDate);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, []);
 
   // Sinkronkan pilihan awal Nomor Unit Truk dengan Armada yang terdata
   useEffect(() => {
@@ -449,9 +484,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       if (filterDateRange === 'TODAY') {
         if (r.date !== todayStr) return false;
       } else if (filterDateRange === '7DAYS') {
-        const d = new Date();
-        d.setDate(d.getDate() - 7);
-        const sevenDaysAgo = d.toISOString().split('T')[0];
+        const sevenDaysAgo = getDaysAgoWIB(7);
         if (r.date < sevenDaysAgo) return false;
       } else if (filterDateRange === 'THIS_MONTH') {
         const currentMonth = todayStr.substring(0, 7);
@@ -673,10 +706,11 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   };
 
   const handleGoToToday = () => {
-    const now = new Date();
-    setCalendarYear(now.getFullYear());
-    setCalendarMonth(now.getMonth());
-    setSelectedDateForDetail(todayStr);
+    const wib = getWIBDateParts();
+    setTodayStr(wib.dateStr);
+    setCalendarYear(wib.year);
+    setCalendarMonth(wib.monthIndex);
+    setSelectedDateForDetail(wib.dateStr);
   };
 
   // Export to Excel

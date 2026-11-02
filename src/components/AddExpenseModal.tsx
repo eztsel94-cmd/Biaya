@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory } from '../types/truck';
 import { CATEGORIES } from '../data/initialData';
 import { PlusCircle, X, AlertCircle } from 'lucide-react';
+import { getTodayWIB } from '../utils/formatters';
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -18,7 +19,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   defaultTruckId,
   onAddExpense,
 }) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayWIB();
 
   const [date, setDate] = useState(todayStr);
   const [truckId, setTruckId] = useState('');
@@ -29,7 +30,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(getTodayWIB());
       setTruckId(defaultTruckId || (trucks[0]?.id ?? ''));
       setDescription('');
       setAmount('');
