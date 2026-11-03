@@ -415,7 +415,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       const dateStr = `${calendarYear}-${curM}-${curD}`;
       cells.push({
         dateStr,
-        dayNum,
+        dayNum: day,
         isCurrentMonth: true,
         isToday: dateStr === todayStr,
         stat: dailyStatsMap.get(dateStr),
@@ -432,7 +432,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       const dateStr = `${nextY}-${nextM}-${nextD}`;
       cells.push({
         dateStr,
-        dayNum,
+        dayNum: day,
         isCurrentMonth: false,
         isToday: dateStr === todayStr,
         stat: dailyStatsMap.get(dateStr),
@@ -1087,7 +1087,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
                       <div className="text-right sm:shrink-0 border-t sm:border-t-0 border-slate-900 pt-1.5 sm:pt-0">
                         <span className="text-base font-black text-emerald-400 font-mono">
-                          {r.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                          {(Number(r.tonnage) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                           <span className="text-xs font-semibold text-emerald-400/80">Ton</span>
                         </span>
                       </div>
@@ -1112,10 +1112,10 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           if (!modalSearchQuery.trim()) return true;
           const q = modalSearchQuery.toLowerCase();
           return (
-            t.driverName.toLowerCase().includes(q) ||
-            t.truckNumber.toLowerCase().includes(q) ||
-            t.afdeling.toLowerCase().includes(q) ||
-            (t.notes || '').toLowerCase().includes(q)
+            String(t.driverName || '').toLowerCase().includes(q) ||
+            String(t.truckNumber || '').toLowerCase().includes(q) ||
+            String(t.afdeling || '').toLowerCase().includes(q) ||
+            String(t.notes || '').toLowerCase().includes(q)
           );
         });
 
@@ -1240,7 +1240,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                                       <span>
                                         <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong> {t.truckNumber} &bull; <span className="text-emerald-300 font-semibold">{t.driverName}</span>
                                       </span>
-                                      <span className="text-white font-bold shrink-0">({t.tonnage}T)</span>
+                                      <span className="text-white font-bold shrink-0">({Number(t.tonnage) || 0}T)</span>
                                     </span>
                                   ))}
                                 </div>
@@ -1301,7 +1301,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                           </div>
 
                           <span className="text-sm font-black text-emerald-400 font-mono shrink-0">
-                            {trip.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                            {(Number(trip.tonnage) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                             <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
                           </span>
                         </div>

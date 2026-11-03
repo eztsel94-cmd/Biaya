@@ -23,8 +23,6 @@ export const UserRoleModal: React.FC<UserRoleModalProps> = ({
   onAddUser,
   onDeleteUser,
 }) => {
-  if (!isOpen) return null;
-
   const isAdmin = currentUser.role === 'admin';
 
   // PIN Verification State when a non-admin attempts to switch into an Admin account
@@ -38,6 +36,8 @@ export const UserRoleModal: React.FC<UserRoleModalProps> = ({
   const [newName, setNewName] = useState<string>('');
   const [newRole, setNewRole] = useState<UserRole>('operator');
   const [newDepartment, setNewDepartment] = useState<string>('Armada Truk TBS - Traksi KPU');
+
+  if (!isOpen) return null;
 
   const handleSelectAccount = (targetUser: AppUser) => {
     // Jika pengguna saat ini adalah supir/operator dan ingin beralih ke akun Admin:

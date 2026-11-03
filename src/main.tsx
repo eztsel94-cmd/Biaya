@@ -39,15 +39,24 @@ class RootErrorBoundary extends React.Component<{ children: React.ReactNode }, E
             </div>
             <h2 className="text-lg font-extrabold text-white">Sistem Traksi KPU</h2>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Halaman sedang disinkronkan ulang. Silakan tekan tombol di bawah ini untuk memuat ulang portal.
+              Halaman sedang disinkronkan ulang. Silakan tekan tombol di bawah ini untuk membuka portal.
             </p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-lg"
-            >
-              Muat Ulang Halaman
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => this.setState({ hasError: false, errorMessage: '' })}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-lg"
+              >
+                Buka Portal Sekarang
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition cursor-pointer border border-slate-700"
+              >
+                Muat Ulang Halaman
+              </button>
+            </div>
           </div>
         </div>
       );

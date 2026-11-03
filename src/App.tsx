@@ -356,19 +356,11 @@ export default function App() {
     }
   };
 
-  // 3A. IF IN DEDICATED PEMUAT PORTAL MODE (TERKUNCI & HANYA LIHAT HASIL):
-  if (isPemuatPortalMode || activeTab === 'pemuat_portal') {
-    return (
-      <PemuatPortalView
-        trucks={trucks}
-        initialPemuatName={pemuatPortalName}
-        onExitToAdmin={handleExitPemuatPortal}
-      />
-    );
-  }
+  // 3A. DEDICATED DRIVER PORTAL MEMO & PIN STATES (Must be declared before any conditional returns)
+  const [unmatchedPinPrompt, setUnmatchedPinPrompt] = useState(false);
+  const [unmatchedPinInput, setUnmatchedPinInput] = useState('');
+  const [unmatchedPinError, setUnmatchedPinError] = useState(false);
 
-  // 3B. IF IN DEDICATED DRIVER PORTAL MODE:
-  // Render ONLY this driver's Dump Truck data!
   const activeDriverTruck = React.useMemo(() => {
     if (driverPortalTruckId) {
       const match = trucks.find((t) => t.id === driverPortalTruckId);
@@ -383,9 +375,16 @@ export default function App() {
     return null;
   }, [trucks, driverPortalTruckId, driverPortalQuery]);
 
-  const [unmatchedPinPrompt, setUnmatchedPinPrompt] = useState(false);
-  const [unmatchedPinInput, setUnmatchedPinInput] = useState('');
-  const [unmatchedPinError, setUnmatchedPinError] = useState(false);
+  // 3B. IF IN DEDICATED PEMUAT PORTAL MODE (TERKUNCI & HANYA LIHAT HASIL):
+  if (isPemuatPortalMode || activeTab === 'pemuat_portal') {
+    return (
+      <PemuatPortalView
+        trucks={trucks}
+        initialPemuatName={pemuatPortalName}
+        onExitToAdmin={handleExitPemuatPortal}
+      />
+    );
+  }
 
   // Jika URL adalah ?dt= kosong (PILIH_UNIT), tampilkan kartu pemilihan unit armada secara langsung
   if (driverPortalQuery && !activeDriverTruck) {
