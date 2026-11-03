@@ -55,6 +55,11 @@ import {
   formatDateIndoFull,
 } from './PemuatPortalView';
 import { getTodayWIB, getDaysAgoWIB, getWIBDateParts } from '../utils/formatters';
+import {
+  getPemuatPortalUrl,
+  getWhatsAppSharePemuatUrl,
+  copyTextToClipboard,
+} from '../utils/driverLink';
 
 const QUICK_TRUCKS: string[] = [];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
@@ -265,6 +270,15 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
   // Share link pemuat modal state
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [copiedBerandaPemuatLink, setCopiedBerandaPemuatLink] = useState<boolean>(false);
+  const directPemuatLinkUrl = useMemo(() => getPemuatPortalUrl(), []);
+
+  const handleCopyBerandaPemuatLink = async () => {
+    await copyTextToClipboard(directPemuatLinkUrl);
+    setCopiedBerandaPemuatLink(true);
+    showToast('Link Portal Pemuat berhasil disalin!', 'success');
+    setTimeout(() => setCopiedBerandaPemuatLink(false), 2500);
+  };
 
   // Notifikasi helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -861,6 +875,60 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
               <FileSpreadsheet className="w-4 h-4" />
               <span>Ekspor Excel</span>
             </button>
+          </div>
+        </div>
+
+        {/* BAR AKSES & LINK KHUSUS PORTAL PEMUAT DI BERANDA */}
+        <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-emerald-950/20 border border-emerald-500/25 rounded-2xl p-3.5">
+          <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <Link2 className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs sm:text-sm font-bold text-emerald-300">
+                  Link Akses Portal Pemuat TBS
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  Mode Terkunci &bull; Hanya Lihat
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5 font-mono">
+                {directPemuatLinkUrl}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onOpenPemuatPortal && (
+              <button
+                type="button"
+                onClick={() => onOpenPemuatPortal()}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition shadow-md shadow-emerald-500/20 cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Masuk ke Portal Pemuat</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleCopyBerandaPemuatLink}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition cursor-pointer"
+            >
+              <Check className={`w-3.5 h-3.5 ${copiedBerandaPemuatLink ? 'text-emerald-400' : 'hidden'}`} />
+              <span>{copiedBerandaPemuatLink ? 'Link Tersalin' : 'Salin Link'}</span>
+            </button>
+
+            <a
+              href={getWhatsAppSharePemuatUrl({ directUrl: directPemuatLinkUrl })}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-emerald-950/60 text-slate-200 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/40 text-xs font-bold transition"
+            >
+              <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>WhatsApp</span>
+            </a>
           </div>
         </div>
 

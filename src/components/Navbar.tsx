@@ -108,18 +108,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => setActiveTab('pemuat_portal')}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all ${
-                  activeTab === 'pemuat_portal'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/10'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                <Users className="w-4 h-4 text-emerald-400" />
-                <span>Portal Pemuat</span>
-              </button>
-
-              <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all ${
                   activeTab === 'dashboard'
@@ -267,7 +255,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* 2. NATIVE MOBILE BOTTOM NAVIGATION BAR (KHUSUS LAYAR HP) */}
       {/* ========================================================================= */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/90 shadow-2xl safe-area-inset-bottom">
-        <div className="grid grid-cols-6 h-16 items-center px-1 max-w-md mx-auto">
+        <div className="grid grid-cols-5 h-16 items-center px-1 max-w-md mx-auto">
           {/* Tab 1: Catatan Harian */}
           <button
             type="button"
@@ -283,23 +271,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
             <span className="text-[10px] mt-1 tracking-tight">Catatan</span>
-          </button>
-
-          {/* Tab 2: Portal Pemuat */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('pemuat_portal')}
-            className={`flex flex-col items-center justify-center h-full py-1 transition-all ${
-              activeTab === 'pemuat_portal' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <div className="relative">
-              <Users className="w-5 h-5" />
-              {activeTab === 'pemuat_portal' && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              )}
-            </div>
-            <span className="text-[10px] mt-1 tracking-tight">Pemuat</span>
           </button>
 
           {/* Tab 3: Laporan Bulanan */}
@@ -496,23 +467,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="flex items-center gap-2">
                   <Scale className="w-4 h-4 text-emerald-400" />
                   <span>Catatan Harian Truk TBS</span>
-                </span>
-                <span className="text-[10px] text-emerald-400 font-mono">Buka &rarr;</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('pemuat_portal');
-                  setIsMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold ${
-                  activeTab === 'pemuat_portal' ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <span>Portal Pemuat TBS (Kalender & Ritase)</span>
                 </span>
                 <span className="text-[10px] text-emerald-400 font-mono">Buka &rarr;</span>
               </button>
