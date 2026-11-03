@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Truck,
   Calendar,
@@ -21,6 +21,9 @@ import {
   Clock,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
   X,
   ExternalLink,
   Save,
@@ -45,8 +48,13 @@ import {
 } from '../services/firebase';
 import { SharePemuatModal } from './SharePemuatModal';
 import { PemuatManagerModal } from './PemuatManagerModal';
-import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl, copyTextToClipboard } from '../utils/driverLink';
-import { getTodayWIB, getDaysAgoWIB } from '../utils/formatters';
+import {
+  INDO_MONTHS,
+  INDO_DAYS_HEADER,
+  INDO_DAYS_HEADER_SHORT,
+  formatDateIndoFull,
+} from './PemuatPortalView';
+import { getTodayWIB, getDaysAgoWIB, getWIBDateParts } from '../utils/formatters';
 
 const QUICK_TRUCKS: string[] = [];
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
@@ -574,6 +582,192 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
     }
   };
 
+  // State & Logika Kalender Interaktif Admin (Mempermudah Edit & Pantau per Tanggal)
+  const formSectionRef = useRef<HTMLDivElement | null>(null);
+  const [calendarYear, setCalendarYear] = useState<number>(() => getWIBDateParts().year);
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => getWIBDateParts().monthIndex);
+  const [calendarFilterText, setCalendarFilterText] = useState<string>('');
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [calendarModalSearch, setCalendarModalSearch] = useState<string>('');
+
+  const calendarFilteredRecords = useMemo(() => {
+    const q = calendarFilterText.trim().toLowerCase();
+    if (!q) return records;
+    return records.filter((r) => {
+      return (
+        String(r.driverName || '').toLowerCase().includes(q) ||
+        String(r.truckNumber || '').toLowerCase().includes(q) ||
+        String(r.afdeling || '').toLowerCase().includes(q) ||
+        String(r.notes || '').toLowerCase().includes(q)
+      );
+    });
+  }, [records, calendarFilterText]);
+
+  const calendarDailyStatsMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        date: string;
+        trips: DailyRecord[];
+        totalTonnage: number;
+        tripCount: number;
+        pemuatList: string[];
+        truckList: string[];
+        afdelingList: string[];
+      }
+    >();
+
+    calendarFilteredRecords.forEach((r) => {
+      const dateKey = String(r.date || '');
+      if (!dateKey) return;
+      if (!map.has(dateKey)) {
+        map.set(dateKey, {
+          date: dateKey,
+          trips: [],
+          totalTonnage: 0,
+          tripCount: 0,
+          pemuatList: [],
+          truckList: [],
+          afdelingList: [],
+        });
+      }
+      const entry = map.get(dateKey)!;
+      entry.trips.push(r);
+      entry.totalTonnage += Number(r.tonnage) || 0;
+      entry.tripCount += 1;
+      if (r.driverName && !entry.pemuatList.includes(r.driverName)) {
+        entry.pemuatList.push(r.driverName);
+      }
+      if (r.truckNumber && !entry.truckList.includes(r.truckNumber)) {
+        entry.truckList.push(r.truckNumber);
+      }
+      if (r.afdeling && !entry.afdelingList.includes(r.afdeling)) {
+        entry.afdelingList.push(r.afdeling);
+      }
+    });
+
+    return map;
+  }, [calendarFilteredRecords]);
+
+  const calendarMonthMetrics = useMemo(() => {
+    const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    let monthTon = 0;
+    let monthRit = 0;
+    const activeDays = new Set<string>();
+
+    calendarFilteredRecords.forEach((r) => {
+      const dStr = String(r.date || '');
+      if (dStr.startsWith(curYearMonth)) {
+        monthTon += Number(r.tonnage) || 0;
+        monthRit += 1;
+        activeDays.add(dStr);
+      }
+    });
+
+    return {
+      monthTon,
+      monthRit,
+      activeDaysCount: activeDays.size,
+    };
+  }, [calendarFilteredRecords, calendarYear, calendarMonth]);
+
+  const calendarCells = useMemo(() => {
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    const startDayOfWeek = (firstDay.getDay() + 6) % 7;
+
+    const daysInCurrentMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    const daysInPrevMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+
+    const cells: Array<{
+      dateStr: string;
+      dayNum: number;
+      isCurrentMonth: boolean;
+      isToday: boolean;
+      stat?: {
+        trips: DailyRecord[];
+        totalTonnage: number;
+        tripCount: number;
+        pemuatList: string[];
+        truckList: string[];
+        afdelingList: string[];
+      };
+    }> = [];
+
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const dayNum = daysInPrevMonth - i;
+      const prevDate = new Date(calendarYear, calendarMonth - 1, dayNum);
+      const prevY = prevDate.getFullYear();
+      const prevM = String(prevDate.getMonth() + 1).padStart(2, '0');
+      const prevD = String(dayNum).padStart(2, '0');
+      const dateStr = `${prevY}-${prevM}-${prevD}`;
+      cells.push({
+        dateStr,
+        dayNum,
+        isCurrentMonth: false,
+        isToday: dateStr === todayStr,
+        stat: calendarDailyStatsMap.get(dateStr),
+      });
+    }
+
+    for (let day = 1; day <= daysInCurrentMonth; day++) {
+      const curM = String(calendarMonth + 1).padStart(2, '0');
+      const curD = String(day).padStart(2, '0');
+      const dateStr = `${calendarYear}-${curM}-${curD}`;
+      cells.push({
+        dateStr,
+        dayNum: day,
+        isCurrentMonth: true,
+        isToday: dateStr === todayStr,
+        stat: calendarDailyStatsMap.get(dateStr),
+      });
+    }
+
+    const totalCells = cells.length > 35 ? 42 : 35;
+    const remaining = totalCells - cells.length;
+    for (let day = 1; day <= remaining; day++) {
+      const nextDate = new Date(calendarYear, calendarMonth + 1, day);
+      const nextY = nextDate.getFullYear();
+      const nextM = String(nextDate.getMonth() + 1).padStart(2, '0');
+      const nextD = String(day).padStart(2, '0');
+      const dateStr = `${nextY}-${nextM}-${nextD}`;
+      cells.push({
+        dateStr,
+        dayNum: day,
+        isCurrentMonth: false,
+        isToday: dateStr === todayStr,
+        stat: calendarDailyStatsMap.get(dateStr),
+      });
+    }
+
+    return cells;
+  }, [calendarYear, calendarMonth, todayStr, calendarDailyStatsMap]);
+
+  const handlePrevCalendarMonth = () => {
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear((y) => y - 1);
+    } else {
+      setCalendarMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextCalendarMonth = () => {
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear((y) => y + 1);
+    } else {
+      setCalendarMonth((m) => m + 1);
+    }
+  };
+
+  const handleGoToTodayCalendar = () => {
+    const wib = getWIBDateParts();
+    setTodayStr(wib.dateStr);
+    setCalendarYear(wib.year);
+    setCalendarMonth(wib.monthIndex);
+    setSelectedCalendarDate(wib.dateStr);
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -670,65 +864,197 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
           </div>
         </div>
 
-        {/* DEDICATED PEMUAT PORTAL LINK BOX (Persis seperti Link Khusus Supir di Armada) */}
-        <div className="mt-4 p-3.5 rounded-xl bg-emerald-950/25 border border-emerald-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-emerald-400 flex items-center gap-1.5 text-xs">
-                <Link2 className="w-3.5 h-3.5" />
-                Link Khusus Portal Pemuat TBS (Terkunci &amp; Hanya Lihat Hasil)
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/25">
-                Tanpa Akses Edit / Admin
-              </span>
+        {/* KALENDER CATATAN HARIAN & EDIT CEPAT ADMIN */}
+        <div className="mt-5 pt-5 border-t border-slate-800 space-y-4">
+          {/* Bar Navigasi Bulan & Ringkasan Bulan */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950 p-3.5 sm:p-4 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrevCalendarMonth}
+                className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 transition cursor-pointer"
+                title="Bulan sebelumnya"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="px-3 py-1 text-center min-w-[150px]">
+                <span className="text-base sm:text-lg font-extrabold text-white tracking-wide">
+                  {INDO_MONTHS[calendarMonth]} {calendarYear}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextCalendarMonth}
+                className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 transition cursor-pointer"
+                title="Bulan berikutnya"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGoToTodayCalendar}
+                className="ml-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-emerald-500/20 text-slate-200 hover:text-emerald-300 text-xs font-bold border border-slate-800 hover:border-emerald-500/40 transition cursor-pointer"
+              >
+                Hari Ini
+              </button>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Bagikan link ini ke pemuat agar mereka dapat melihat hasil ritase &amp; tonase harian/bulanan tanpa bisa mengedit data.
-            </p>
+
+            {/* Statistik Bulan Ini */}
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+              <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-slate-400">Total Muat: </span>
+                <strong className="text-emerald-400 font-mono">
+                  {calendarMonthMetrics.monthTon.toLocaleString('id-ID', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  Ton
+                </strong>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-slate-400">Ritase: </span>
+                <strong className="text-white font-mono">{calendarMonthMetrics.monthRit} Rit</strong>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-slate-400">Hari Aktif: </span>
+                <strong className="text-white font-mono">{calendarMonthMetrics.activeDaysCount} Hari</strong>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5 bg-slate-950/90 p-1.5 rounded-lg border border-slate-800 w-full sm:w-auto">
+          {/* Pencarian & Keterangan Kalender */}
+          <div className="space-y-2.5">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                readOnly
-                value={getPemuatPortalUrl()}
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="bg-transparent text-[11px] font-mono text-emerald-300 w-full sm:w-56 outline-none px-1.5 truncate select-all"
+                value={calendarFilterText}
+                onChange={(e) => setCalendarFilterText(e.target.value)}
+                placeholder="Filter nama pemuat, nomor truk DT, afdeling, atau catatan..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl pl-10 pr-9 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none transition"
               />
-              <button
-                type="button"
-                onClick={async () => {
-                  await copyTextToClipboard(getPemuatPortalUrl());
-                  showToast('Link Portal Pemuat berhasil disalin!', 'success');
-                }}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold rounded transition flex items-center gap-1 border border-slate-700 shrink-0 cursor-pointer"
-              >
-                <Check className="w-3 h-3 text-emerald-400" />
-                <span>Salin</span>
-              </button>
+              {calendarFilterText && (
+                <button
+                  type="button"
+                  onClick={() => setCalendarFilterText('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            <a
-              href={getWhatsAppSharePemuatUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1.5 shadow-sm shrink-0"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>WhatsApp</span>
-            </a>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 px-1">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
+                  <span>Ada Aktivitas Muat</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full border-2 border-emerald-400 inline-block" />
+                  <span>Hari Ini</span>
+                </span>
+              </div>
+              <span className="text-[11px] text-emerald-400 font-medium">
+                💡 Ketuk tanggal kalender untuk melihat, mengedit, atau menghapus data muatan
+              </span>
+            </div>
+          </div>
 
-            {onOpenPemuatPortal && (
-              <button
-                type="button"
-                onClick={() => onOpenPemuatPortal()}
-                className="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-[11px] font-semibold transition border border-slate-700 flex items-center gap-1.5 shrink-0 cursor-pointer"
+          {/* Header Hari (Sen s/d Min) */}
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-center text-xs font-bold text-slate-400">
+            {INDO_DAYS_HEADER.map((day, idx) => (
+              <div
+                key={day}
+                className={`py-2 rounded-xl bg-slate-950/90 border border-slate-800/90 ${
+                  idx === 6 ? 'text-rose-400' : 'text-slate-200'
+                }`}
               >
-                <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Buka Portal</span>
-              </button>
-            )}
+                <span className="hidden sm:inline">{day}</span>
+                <span className="sm:hidden">{INDO_DAYS_HEADER_SHORT[idx]}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Grid Tanggal Kalender */}
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+            {calendarCells.map((cell) => {
+              const hasData = cell.stat && cell.stat.tripCount > 0;
+              const stats = cell.stat;
+
+              return (
+                <div
+                  key={cell.dateStr}
+                  onClick={() => {
+                    setSelectedCalendarDate(cell.dateStr);
+                    setCalendarModalSearch('');
+                  }}
+                  className={`relative min-h-[86px] sm:min-h-[112px] p-1.5 sm:p-2 rounded-xl border transition-all duration-150 flex flex-col justify-between cursor-pointer select-none ${
+                    cell.isCurrentMonth
+                      ? hasData
+                        ? 'bg-slate-950/95 border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/70 hover:border-slate-700'
+                      : 'bg-slate-950/25 border-slate-900/50 opacity-40 hover:opacity-75'
+                  } ${
+                    cell.isToday
+                      ? 'ring-2 ring-emerald-400 border-emerald-500 bg-emerald-950/20'
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`inline-flex items-center justify-center text-xs font-bold font-mono rounded-md px-1.5 py-0.5 ${
+                        cell.isToday
+                          ? 'bg-emerald-500 text-slate-950 font-black'
+                          : hasData
+                          ? 'text-white'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {cell.dayNum}
+                    </span>
+                    {hasData && !cell.isToday && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    )}
+                  </div>
+
+                  {hasData && stats ? (
+                    <div className="my-1 space-y-1">
+                      <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-md px-1 py-0.5 text-center">
+                        <span className="text-[11px] sm:text-xs font-black text-emerald-400 font-mono block leading-tight">
+                          {stats.totalTonnage.toLocaleString('id-ID', {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 2,
+                          })}
+                          <span className="text-[9px] font-semibold text-emerald-400/80 ml-0.5">T</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-slate-300 font-mono">
+                        <span className="font-bold text-white">{stats.tripCount}</span>
+                        <span className="text-slate-400">Rit</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="my-auto py-2 text-center">
+                      <span className="text-[10px] text-slate-700 font-mono">-</span>
+                    </div>
+                  )}
+
+                  {hasData && stats ? (
+                    <div className="pt-0.5 flex items-center justify-between text-[9px] text-slate-400 border-t border-slate-900/60">
+                      <span className="truncate font-medium text-slate-300">
+                        {stats.truckList.slice(0, 2).join(', ')}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="h-3" />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -882,7 +1208,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       )}
 
       {/* Grid Utama: Form Input Harian & Tabel Riwayat */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div ref={formSectionRef} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Kolom Kiri: Form Input Data Harian Sederhana (5/12) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl sticky top-4">
@@ -1977,6 +2303,300 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
           </div>
         </div>
       )}
+
+      {/* Modal Rincian & Edit Muat per Tanggal Kalender (Khusus Admin) */}
+      {selectedCalendarDate && (() => {
+        const dayStat = calendarDailyStatsMap.get(selectedCalendarDate);
+        const dayTrips = dayStat ? dayStat.trips : [];
+        const dayTotalTonnage = dayStat ? dayStat.totalTonnage : 0;
+        const dayPemuatList = dayStat ? dayStat.pemuatList : [];
+        const dayTruckList = dayStat ? dayStat.truckList : [];
+
+        const filteredDayTrips = dayTrips.filter((t) => {
+          if (!calendarModalSearch.trim()) return true;
+          const q = calendarModalSearch.toLowerCase();
+          return (
+            String(t.driverName || '').toLowerCase().includes(q) ||
+            String(t.truckNumber || '').toLowerCase().includes(q) ||
+            String(t.afdeling || '').toLowerCase().includes(q) ||
+            String(t.notes || '').toLowerCase().includes(q)
+          );
+        });
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-150">
+            <div className="bg-slate-900 border border-slate-700/90 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-950/50 via-slate-900 to-slate-900">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <CalendarDays className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-extrabold text-white">
+                      Rincian Muat: {formatDateIndoFull(selectedCalendarDate)}
+                    </h3>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                      {selectedCalendarDate} &bull; {dayTrips.length} Ritase Tercatat
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCalendarDate(null);
+                    setCalendarModalSearch('');
+                  }}
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+                {/* Summary Mini Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 block">Total Tonase</span>
+                    <span className="text-base sm:text-lg font-black text-emerald-400 font-mono">
+                      {dayTotalTonnage.toLocaleString('id-ID', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      <span className="text-[10px] font-normal text-slate-400">Ton</span>
+                    </span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 block">Total Ritase</span>
+                    <span className="text-base sm:text-lg font-black text-white font-mono">
+                      {dayTrips.length} <span className="text-[10px] font-normal text-slate-400">Rit</span>
+                    </span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 block">Pemuat Bertugas</span>
+                    <span className="text-base sm:text-lg font-black text-white font-mono">
+                      {dayPemuatList.length} <span className="text-[10px] font-normal text-slate-400">Orang</span>
+                    </span>
+                  </div>
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 block">Unit Truk</span>
+                    <span className="text-base sm:text-lg font-black text-white font-mono">
+                      {dayTruckList.length} <span className="text-[10px] font-normal text-slate-400">Unit</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Daftar Pemuat Bertugas */}
+                {dayPemuatList.length > 0 && (
+                  <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                    <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Daftar Pemuat Bertugas ({dayPemuatList.length})</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dayPemuatList.map((nama) => {
+                        const loaderTrips = dayTrips.filter((t) => t.driverName === nama);
+                        const loaderTons = loaderTrips.reduce((s, t) => s + (Number(t.tonnage) || 0), 0);
+                        return (
+                          <div
+                            key={nama}
+                            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs"
+                          >
+                            <span className="font-bold text-white">{nama}</span>
+                            <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              {loaderTons.toFixed(2)} T ({loaderTrips.length} Rit)
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rekap Urutan Ritase per Afdeling pada Tanggal Ini */}
+                {(() => {
+                  const afdMap = new Map<string, DailyRecord[]>();
+                  dayTrips.forEach((t) => {
+                    const afd = t.afdeling || 'Afdeling 1';
+                    if (!afdMap.has(afd)) afdMap.set(afd, []);
+                    afdMap.get(afd)!.push(t);
+                  });
+                  if (afdMap.size === 0) return null;
+                  return (
+                    <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>URUTAN RITASE PER AFDELING:</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {Array.from(afdMap.entries())
+                          .sort(([a], [b]) => a.localeCompare(b, 'id', { numeric: true }))
+                          .map(([afdName, tList]) => {
+                            const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
+                            const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
+                            return (
+                              <div
+                                key={afdName}
+                                className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between gap-2 font-bold text-slate-200">
+                                  <span>{afdName}</span>
+                                  <span className="text-emerald-400 font-mono text-[11px]">
+                                    {tList.length} Rit ({totalTons.toFixed(2)}T)
+                                  </span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  {sortedList.map((t, idx) => (
+                                    <span
+                                      key={t.id}
+                                      className="text-[10px] px-2 py-1 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono flex items-center justify-between gap-1.5"
+                                    >
+                                      <span>
+                                        <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong>{' '}
+                                        {t.truckNumber} &bull;{' '}
+                                        <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                      </span>
+                                      <span className="text-white font-bold shrink-0">
+                                        ({Number(t.tonnage) || 0}T)
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Rincian Ritase & Muatan (Bisa Edit & Hapus Langsung) */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Rincian Ritase &amp; Muatan</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                        Total {filteredDayTrips.length} transaksi &bull; Klik ikon pensil untuk mengedit
+                      </p>
+                    </div>
+                  </div>
+
+                  {dayTrips.length > 0 && (
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={calendarModalSearch}
+                        onChange={(e) => setCalendarModalSearch(e.target.value)}
+                        placeholder="Cari nama pemuat, nomor unit truk (DT 90), afdeling..."
+                        className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none transition"
+                      />
+                    </div>
+                  )}
+
+                  {filteredDayTrips.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-950/50 rounded-xl border border-slate-800/80 text-slate-400 text-xs">
+                      Belum ada pengiriman tercatat pada tanggal ini.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredDayTrips.map((trip, idx) => (
+                        <div
+                          key={trip.id}
+                          className="bg-slate-950 p-3 rounded-xl border border-slate-800 hover:border-emerald-500/40 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-slate-500 text-xs font-mono w-4">{idx + 1}.</span>
+                            <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
+                              {trip.truckNumber}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                              Rit {trip.ritNumber || 1}
+                            </span>
+                            <span className="font-bold text-xs text-white">{trip.driverName}</span>
+                            <span className="text-xs text-slate-400">&bull; {trip.afdeling}</span>
+                            {trip.notes && (
+                              <span className="text-[11px] text-slate-400 font-mono">({trip.notes})</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 border-slate-900 pt-2 sm:pt-0 shrink-0">
+                            <span className="text-sm font-black text-emerald-400 font-mono">
+                              {(Number(trip.tonnage) || 0).toLocaleString('id-ID', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}{' '}
+                              <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
+                            </span>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(trip)}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition cursor-pointer"
+                                title="Edit data muatan ini"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRecordToDelete(trip)}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold transition cursor-pointer"
+                                title="Hapus data muatan ini"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Hapus</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-800 bg-slate-950/90 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetDate = selectedCalendarDate;
+                    setFormData((prev) => ({
+                      ...prev,
+                      date: targetDate,
+                    }));
+                    setSelectedCalendarDate(null);
+                    setCalendarModalSearch('');
+                    setTimeout(() => {
+                      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-950/90 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Tambah Muat Tanggal Ini</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCalendarDate(null);
+                    setCalendarModalSearch('');
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Share Pemuat Isolated Link Modal */}
       <SharePemuatModal
