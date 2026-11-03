@@ -1210,93 +1210,96 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
       {/* Grid Utama: Form Input Harian & Tabel Riwayat */}
       <div ref={formSectionRef} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Kolom Kiri: Form Input Data Harian Sederhana (5/12) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl sticky top-4">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+        {/* Kolom Kiri: Form Input Data Harian Ringkas & Ramah HP (5/12) */}
+        <div className="lg:col-span-5 space-y-3">
+          <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-xl sticky top-4">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2.5">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <h2 className="text-base sm:text-lg font-bold text-white">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h2 className="text-sm sm:text-base font-bold text-white">
                   Form Input Data Harian
                 </h2>
               </div>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
-                Real-time
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono font-bold">
+                  Rit #{nextRitNumber} &bull; {formData.afdeling || 'Afd'}
+                </span>
+              </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Tanggal */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  Tanggal Pengiriman
-                </label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
-                />
-              </div>
-
-              {/* Nomor Unit Truk */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                    Nomor Unit Truk
+            <form onSubmit={handleSubmit} className="space-y-2.5">
+              {/* Baris 1: Tanggal & Nomor Unit Truk berdampingan agar hemat ruang di HP */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span>Tanggal</span>
                   </label>
-                  <span className="text-[10px] text-emerald-400 font-medium">
-                    Otomatis dari Armada ({dynamicTruckCodes.length} Unit)
-                  </span>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    required
+                    className="w-full px-2.5 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition"
+                  />
                 </div>
-                <input
-                  type="text"
-                  list="daily-truck-codes-list"
-                  placeholder="Ketik atau pilih (cth: DT 90)"
-                  value={formData.truckNumber}
-                  onChange={(e) => setFormData({ ...formData, truckNumber: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-semibold text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
-                />
-                <datalist id="daily-truck-codes-list">
-                  {dynamicTruckCodes.map((dt) => (
-                    <option key={dt} value={dt} />
-                  ))}
-                </datalist>
 
-                {/* Tombol Cepat Pilihan DT Sesuai Armada */}
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {dynamicTruckCodes.map((dt) => (
-                    <button
-                      key={dt}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, truckNumber: dt })}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium transition border cursor-pointer ${
-                        formData.truckNumber.toUpperCase() === dt
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                      }`}
-                    >
-                      {dt}
-                    </button>
-                  ))}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                      <Truck className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Unit Truk</span>
+                    </label>
+                    <span className="text-[9px] text-emerald-400 font-mono">
+                      {dynamicTruckCodes.length} DT
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    list="daily-truck-codes-list"
+                    placeholder="Cth: DT 90"
+                    value={formData.truckNumber}
+                    onChange={(e) => setFormData({ ...formData, truckNumber: e.target.value })}
+                    required
+                    className="w-full px-2.5 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white font-mono font-bold text-xs focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+                  />
+                  <datalist id="daily-truck-codes-list">
+                    {dynamicTruckCodes.map((dt) => (
+                      <option key={dt} value={dt} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
-              {/* Nama Pemuat (Fitur Otomatis Multi-Select & Tambah Manual) */}
+              {/* Tombol Cepat Pilihan DT Ringkas */}
+              <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-0.5">
+                {dynamicTruckCodes.map((dt) => (
+                  <button
+                    key={dt}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, truckNumber: dt })}
+                    className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold transition border cursor-pointer ${
+                      formData.truckNumber.toUpperCase() === dt
+                        ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/60'
+                        : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                    }`}
+                  >
+                    {dt}
+                  </button>
+                ))}
+              </div>
+
+              {/* Nama Pemuat (Ringkas Multi-Select & Tambah Manual) */}
               <div>
-                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
                   <div className="flex items-center gap-1.5">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-emerald-400" />
-                      Nama Pemuat (Bisa &gt; 1 Orang)
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                      <User className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Nama Pemuat</span>
                     </label>
                     {selectedPemuatList.length > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                        {selectedPemuatList.length} Terpilih
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        {selectedPemuatList.length} dipilih
                       </span>
                     )}
                   </div>
@@ -1308,17 +1311,17 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                         onClick={() => setFormData((prev) => ({ ...prev, driverName: '' }))}
                         className="text-[10px] text-slate-400 hover:text-rose-400 transition cursor-pointer"
                       >
-                        Bersihkan
+                        Reset
                       </button>
                     )}
                     <button
                       type="button"
                       onClick={() => setIsPemuatManagerOpen(true)}
-                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 cursor-pointer"
+                      className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-0.5 cursor-pointer"
                       title="Tulis nama pemuat manual agar tersimpan di fitur otomatis"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      <span>+ Tulis / Kelola Pemuat</span>
+                      <Sparkles className="w-2.5 h-2.5" />
+                      <span>+ Kelola Pemuat</span>
                     </button>
                   </div>
                 </div>
@@ -1326,11 +1329,11 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 <input
                   type="text"
                   list="daily-pemuat-master-list"
-                  placeholder="Klik tombol di bawah atau ketik (contoh: ANTON/DELFIN/YUVEN)..."
+                  placeholder="Klik nama di bawah atau ketik (ANTON/DELFIN)..."
                   value={formData.driverName}
                   onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
                   required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm font-semibold focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500 font-mono"
+                  className="w-full px-2.5 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-xs font-semibold focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500 font-mono"
                 />
                 <datalist id="daily-pemuat-master-list">
                   {pemuatMaster.map((p) => (
@@ -1338,8 +1341,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   ))}
                 </datalist>
 
-                {/* Tombol Cepat Otomatis Multi-Select Nama Pemuat */}
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                {/* Tombol Cepat Otomatis Multi-Select Nama Pemuat Ringkas */}
+                <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto pr-0.5">
                   {pemuatMaster.map((p) => {
                     const isSelected = selectedPemuatList.includes(p.name.toUpperCase());
                     return (
@@ -1347,37 +1350,48 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                         key={p.id}
                         type="button"
                         onClick={() => handleTogglePemuatName(p.name)}
-                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border flex items-center gap-1 cursor-pointer ${
+                        className={`text-[10px] px-2 py-0.5 rounded-md font-medium transition border flex items-center gap-0.5 cursor-pointer ${
                           isSelected
-                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm shadow-emerald-500/20'
+                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm'
                             : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
                         }`}
                       >
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                         <span>{p.name}</span>
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1.5">
-                  * Klik nama pemuat untuk memilih lebih dari satu (otomatis digabung dengan pemisah garis miring, cth: <strong>ANTON/DELFIN/YUVEN</strong>).
-                </p>
               </div>
 
-              {/* Tonase (Ton) - Opsional */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-emerald-400" />
+              {/* Tonase (Ton) - Opsional & Keypad 1 Baris Ringkas */}
+              <div className="p-2 bg-slate-950/60 border border-slate-800/90 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between gap-1">
+                  <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                    <Scale className="w-3 h-3 text-emerald-400 shrink-0" />
                     <span>Tonase (Ton)</span>
-                    <span className="text-[10px] font-normal lowercase text-slate-400">(opsional / bisa menyusul)</span>
+                    <span className="text-[9px] font-normal lowercase text-slate-400">(opsional)</span>
                   </label>
-                  {formData.tonnage && (
-                    <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                      Tercatat: {String(formData.tonnage).replace('.', ',')} Ton
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTonBackspace(false)}
+                      className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold border border-slate-700 transition cursor-pointer"
+                      title="Hapus 1 angka terakhir"
+                    >
+                      ⌫ Hapus
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, tonnage: '' as any })}
+                      className="px-1.5 py-0.5 rounded bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 text-[10px] font-bold border border-rose-800/50 transition cursor-pointer"
+                      title="Bersihkan kolom tonase"
+                    >
+                      Reset
+                    </button>
+                  </div>
                 </div>
+
                 <div className="relative">
                   <input
                     type="text"
@@ -1385,78 +1399,49 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     placeholder="Contoh: 6,79 (Boleh dikosongkan)"
                     value={formData.tonnage}
                     onChange={(e) => handleTonInputChange(e.target.value, false)}
-                    className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+                    className="w-full px-2.5 py-1.5 pr-12 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500 placeholder:font-normal placeholder:text-xs"
                   />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded">
                     TON
                   </div>
                 </div>
 
-                {/* Tombol Angka Cepat Tonase 1 - 0 (Tekan 6, 7, 9 -> Otomatis 6,79 Ton) */}
-                <div className="mt-2.5 p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-slate-400">
-                      Pilih Angka Tonase (Contoh tekan <strong className="text-emerald-400">6</strong>, <strong className="text-emerald-400">7</strong>, <strong className="text-emerald-400">9</strong> &rarr; <strong className="text-white">6,79</strong> ton):
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleTonBackspace(false)}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold border border-slate-700 transition cursor-pointer"
-                        title="Hapus 1 angka terakhir"
-                      >
-                        ⌫ Hapus
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, tonnage: '' as any })}
-                        className="px-2 py-0.5 rounded bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 text-[11px] font-bold border border-rose-800/50 transition cursor-pointer"
-                        title="Bersihkan kolom tonase"
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
-                      <button
-                        key={digit}
-                        type="button"
-                        onClick={() => handleTonDigitPress(digit, false)}
-                        className="py-2 rounded-lg bg-slate-800 hover:bg-emerald-600 active:scale-95 text-white font-mono font-bold text-sm border border-slate-700 hover:border-emerald-400 transition shadow-sm cursor-pointer"
-                      >
-                        {digit}
-                      </button>
-                    ))}
-                  </div>
+                {/* Tombol Angka Cepat Tonase 1 - 0 dalam 1 Baris (10 Kolom) */}
+                <div className="grid grid-cols-10 gap-1">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      onClick={() => handleTonDigitPress(digit, false)}
+                      className="py-1.5 rounded-md bg-slate-800 hover:bg-emerald-600 active:scale-95 text-white font-mono font-bold text-xs border border-slate-700 hover:border-emerald-400 transition cursor-pointer"
+                    >
+                      {digit}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Afdeling */}
+              {/* Afdeling & Indikator Ritase Otomatis Ringkas */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  Afdeling / Lokasi Panen
-                </label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Afdeling 1"
-                  value={formData.afdeling}
-                  onChange={(e) => setFormData({ ...formData, afdeling: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span>Afdeling / Lokasi</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-emerald-400 font-semibold">
+                    Otomatis: Rit #{nextRitNumber} ({afdelingRitsOnDate.length} rit tercatat)
+                  </span>
+                </div>
 
-                {/* Pilihan Cepat Afdeling */}
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div className="grid grid-cols-4 gap-1 mb-1.5">
                   {QUICK_AFDELINGS.map((afd) => (
                     <button
                       key={afd}
                       type="button"
                       onClick={() => setFormData({ ...formData, afdeling: afd })}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
+                      className={`text-[10px] py-1 px-1.5 rounded-lg font-semibold transition border text-center truncate cursor-pointer ${
                         formData.afdeling === afd
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                          ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/60 font-bold'
                           : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
                       }`}
                     >
@@ -1464,36 +1449,20 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     </button>
                   ))}
                 </div>
-              </div>
 
-              {/* Box Nomor Ritase Otomatis Khusus Afdeling Terpilih */}
-              <div className="p-3.5 bg-gradient-to-r from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/30 rounded-xl space-y-2 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-mono font-black text-xs">
-                      #{nextRitNumber}
-                    </span>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">
-                        Nomor Ritase Otomatis
-                      </span>
-                      <span className="text-xs font-bold text-white">
-                        Rit {nextRitNumber} &bull; {formData.afdeling || 'Afdeling'}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                    {afdelingRitsOnDate.length} Rit Tercatat Hari Ini
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Sistem mendeteksi <strong>{formData.afdeling}</strong> dan otomatis mengalokasikan nomor ritase terpisah dari afdeling lainnya.
-                </p>
+                <input
+                  type="text"
+                  placeholder="Ketik afdeling / lokasi lain (cth: Afdeling 1)"
+                  value={formData.afdeling}
+                  onChange={(e) => setFormData({ ...formData, afdeling: e.target.value })}
+                  required
+                  className="w-full px-2.5 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+                />
               </div>
 
               {/* Catatan Tambahan (Opsional) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Catatan / Keterangan (Opsional)
                 </label>
                 <input
@@ -1501,24 +1470,24 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   placeholder="Contoh: Trip 1, Buah Matang, PKS Inti"
                   value={formData.notes || ''}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+                  className="w-full px-2.5 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
                 />
               </div>
 
-              {/* Tombol Submit */}
+              {/* Tombol Submit Ringkas */}
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm tracking-wide transition shadow-lg shadow-emerald-950/50 cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs sm:text-sm tracking-wide transition shadow-md shadow-emerald-950/50 cursor-pointer"
               >
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Menyimpan ke Firestore...</span>
+                    <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Plus className="w-5 h-5" />
+                    <Plus className="w-4 h-4" />
                     <span>Simpan ke Firestore</span>
                   </>
                 )}
@@ -1944,19 +1913,22 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         </div>
       )}
 
-      {/* Modal Edit Data Harian TBS */}
+      {/* Modal Edit Data Harian TBS (Kompak & Bisa Digeser Lancar) */}
       {recordToEdit && editFormData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <Edit2 className="w-5 h-5" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700/90 rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+            {/* Header Modal (Tetap Terlihat di Atas) */}
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <Edit2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Edit Catatan Harian TBS</h3>
-                  <p className="text-xs text-slate-400">
-                    Perubahan akan langsung tersinkronisasi ke Firebase Firestore
+                  <h3 className="text-sm sm:text-base font-bold text-white leading-tight">
+                    Edit Catatan Harian TBS
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {editFormData.truckNumber} &bull; {editFormData.afdeling} (Rit {editFormData.ritNumber || 1})
                   </p>
                 </div>
               </div>
@@ -1966,134 +1938,150 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   setRecordToEdit(null);
                   setEditFormData(null);
                 }}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-4">
-              {/* Tanggal */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  Tanggal Pengiriman
-                </label>
-                <input
-                  type="date"
-                  value={editFormData.date}
-                  onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
-                />
-              </div>
+            {/* Form Konten Kompak & Bisa Di-scroll */}
+            <form onSubmit={handleSaveEdit} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-4 space-y-3">
+                {/* Baris 1: Tanggal & Nomor Ritase */}
+                <div className="grid grid-cols-7 gap-2.5">
+                  <div className="col-span-4">
+                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-emerald-400" />
+                      <span>Tanggal</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={editFormData.date}
+                      onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+                      required
+                      className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition"
+                    />
+                  </div>
 
-              {/* Unit Truk */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                  Nomor Unit Truk
-                </label>
-                <input
-                  type="text"
-                  value={editFormData.truckNumber}
-                  onChange={(e) => setEditFormData({ ...editFormData, truckNumber: e.target.value })}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-semibold text-sm focus:outline-none focus:border-emerald-500 transition"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {dynamicTruckCodes.map((dt) => (
-                    <button
-                      key={dt}
-                      type="button"
-                      onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-mono font-medium transition border cursor-pointer ${
-                        editFormData.truckNumber.toUpperCase() === dt.toUpperCase()
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                      }`}
-                    >
-                      {dt}
-                    </button>
-                  ))}
+                  <div className="col-span-3">
+                    <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Truck className="w-3 h-3 text-sky-400" />
+                      <span>No. Ritase</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editFormData.ritNumber || 1}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          ritNumber: parseInt(e.target.value, 10) || 1,
+                        })
+                      }
+                      className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-bold text-xs focus:outline-none focus:border-emerald-500 transition"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Nama Pemuat (Multi-Select) */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-emerald-400" />
-                    Nama Pemuat (Bisa Lebih Dari 1 Orang)
-                  </label>
-                  {selectedEditPemuatList.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      {selectedEditPemuatList.length} Terpilih
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={editFormData.driverName}
-                  onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
-                  placeholder="Contoh: ANTON/DELFIN/YUVEN"
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition font-mono"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {pemuatMaster.map((p) => {
-                    const isSelected = selectedEditPemuatList.includes(p.name.toUpperCase());
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleToggleEditPemuatName(p.name)}
-                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border flex items-center gap-1 cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
-                            : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                        <span>{p.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Nomor Ritase (Rit) & Afdeling */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {/* Nomor Ritase */}
+                {/* Baris 2: Unit Truk */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-sky-400" />
-                    Nomor Ritase (Rit)
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Truck className="w-3 h-3 text-emerald-400" />
+                    <span>Nomor Unit Truk</span>
                   </label>
                   <input
-                    type="number"
-                    min="1"
-                    value={editFormData.ritNumber || 1}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        ritNumber: parseInt(e.target.value, 10) || 1,
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition"
+                    type="text"
+                    value={editFormData.truckNumber}
+                    onChange={(e) => setEditFormData({ ...editFormData, truckNumber: e.target.value })}
+                    required
+                    className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-semibold text-xs focus:outline-none focus:border-emerald-500 transition"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Urutan rit khusus di {editFormData.afdeling}
-                  </p>
+                  <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto p-1 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                    {dynamicTruckCodes.map((dt) => (
+                      <button
+                        key={dt}
+                        type="button"
+                        onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
+                        className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold transition border cursor-pointer ${
+                          editFormData.truckNumber.toUpperCase() === dt.toUpperCase()
+                            ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50'
+                            : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                        }`}
+                      >
+                        {dt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Tonase (Ton) - Opsional */}
+                {/* Baris 3: Nama Pemuat (Multi-Select Kompak) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Tonase (Ton)</span>
-                    <span className="text-[10px] font-normal lowercase text-slate-400">(opsional)</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                      <User className="w-3 h-3 text-emerald-400" />
+                      <span>Nama Pemuat (Bisa &gt; 1)</span>
+                    </label>
+                    {selectedEditPemuatList.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        {selectedEditPemuatList.length} Terpilih
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={editFormData.driverName}
+                    onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
+                    placeholder="Contoh: ANTON/DELFIN"
+                    required
+                    className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition font-mono"
+                  />
+                  <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto p-1 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                    {pemuatMaster.map((p) => {
+                      const isSelected = selectedEditPemuatList.includes(p.name.toUpperCase());
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleToggleEditPemuatName(p.name)}
+                          className={`text-[10px] px-2 py-0.5 rounded font-medium transition border flex items-center gap-1 cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
+                              : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          <span>{p.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Baris 4: Tonase (Ton) Kompak */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                      <Scale className="w-3 h-3 text-emerald-400" />
+                      <span>Tonase (Ton)</span>
+                      <span className="text-[9px] font-normal lowercase text-slate-400">(opsional)</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleTonBackspace(true)}
+                        className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold border border-slate-700 cursor-pointer"
+                      >
+                        ⌫ Hapus
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditFormData({ ...editFormData, tonnage: '' as any })}
+                        className="px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-bold border border-rose-800/40 cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
                   <div className="relative">
                     <input
                       type="text"
@@ -2101,119 +2089,79 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                       placeholder="Contoh: 6,79 (Boleh kosong)"
                       value={editFormData.tonnage}
                       onChange={(e) => handleTonInputChange(e.target.value, true)}
-                      className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition"
+                      className="w-full px-2.5 py-1.5 pr-12 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition"
                     />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-400 bg-emerald-950/70 px-1.5 py-0.5 rounded">
                       TON
                     </div>
                   </div>
-                  <div className="mt-2 p-2 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">Pilih Angka (1-0):</span>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleTonBackspace(true)}
-                          className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold"
-                        >
-                          ⌫
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditFormData({ ...editFormData, tonnage: '' as any })}
-                          className="px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-bold"
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-5 gap-1">
-                      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
-                        <button
-                          key={digit}
-                          type="button"
-                          onClick={() => handleTonDigitPress(digit, true)}
-                          className="py-1.5 rounded bg-slate-800 hover:bg-emerald-600 text-white font-mono font-bold text-xs border border-slate-700 transition cursor-pointer"
-                        >
-                          {digit}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="grid grid-cols-10 gap-1 mt-1.5">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
+                      <button
+                        key={digit}
+                        type="button"
+                        onClick={() => handleTonDigitPress(digit, true)}
+                        className="py-1 rounded bg-slate-800 hover:bg-emerald-600 text-white font-mono font-bold text-xs border border-slate-700 transition cursor-pointer"
+                      >
+                        {digit}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </div>
 
-              {/* Afdeling */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  Afdeling / Lokasi Panen
-                </label>
-                <input
-                  type="text"
-                  value={editFormData.afdeling}
-                  onChange={(e) => {
-                    const newAfd = e.target.value;
-                    const existingInTargetAfd = records.filter(
-                      (r) =>
-                        r.id !== recordToEdit.id &&
-                        r.date === editFormData.date &&
-                        r.afdeling.trim().toLowerCase() === newAfd.trim().toLowerCase()
-                    );
-                    setEditFormData({
-                      ...editFormData,
-                      afdeling: newAfd,
-                      ritNumber: existingInTargetAfd.length + 1,
-                    });
-                  }}
-                  required
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
-                />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {QUICK_AFDELINGS.map((afd) => (
-                    <button
-                      key={afd}
-                      type="button"
-                      onClick={() => {
-                        const existingInTargetAfd = records.filter(
-                          (r) =>
-                            r.id !== recordToEdit.id &&
-                            r.date === editFormData.date &&
-                            r.afdeling.trim().toLowerCase() === afd.trim().toLowerCase()
-                        );
-                        setEditFormData({
-                          ...editFormData,
-                          afdeling: afd,
-                          ritNumber: existingInTargetAfd.length + 1,
-                        });
-                      }}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border cursor-pointer ${
-                        editFormData.afdeling === afd
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                      }`}
-                    >
-                      {afd}
-                    </button>
-                  ))}
+                {/* Baris 5: Afdeling */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-emerald-400" />
+                    <span>Afdeling / Lokasi Panen</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {QUICK_AFDELINGS.map((afd) => (
+                      <button
+                        key={afd}
+                        type="button"
+                        onClick={() => {
+                          const existingInTargetAfd = records.filter(
+                            (r) =>
+                              r.id !== recordToEdit.id &&
+                              r.date === editFormData.date &&
+                              r.afdeling.trim().toLowerCase() === afd.trim().toLowerCase()
+                          );
+                          setEditFormData({
+                            ...editFormData,
+                            afdeling: afd,
+                            ritNumber: existingInTargetAfd.length + 1,
+                          });
+                        }}
+                        className={`text-[10px] px-2 py-1 rounded-lg font-medium transition border cursor-pointer ${
+                          editFormData.afdeling === afd
+                            ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50 font-bold'
+                            : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                        }`}
+                      >
+                        {afd}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Baris 6: Catatan / Keterangan */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Catatan / Keterangan (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.notes || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                    placeholder="Catatan tambahan (opsional)"
+                    className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition"
+                  />
                 </div>
               </div>
 
-              {/* Catatan / Keterangan */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                  Catatan / Keterangan (Opsional)
-                </label>
-                <input
-                  type="text"
-                  value={editFormData.notes || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-emerald-500 transition"
-                />
-              </div>
-
-              {/* Tombol Aksi Modal */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              {/* Tombol Aksi Modal (Selalu Terlihat di Bawah) */}
+              <div className="px-4 py-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -2221,23 +2169,23 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     setEditFormData(null);
                   }}
                   disabled={isUpdating}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isUpdating}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-950/40 cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-950/40 cursor-pointer"
                 >
                   {isUpdating ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Menyimpan ke Firestore...</span>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
                     </>
                   ) : (
                     <>
-                      <Save className="w-4 h-4" />
+                      <Save className="w-3.5 h-3.5" />
                       <span>Simpan Perubahan</span>
                     </>
                   )}
@@ -2250,7 +2198,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
       {/* Modal Konfirmasi Hapus Data */}
       {recordToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-rose-400">
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
