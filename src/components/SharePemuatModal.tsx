@@ -10,10 +10,17 @@ import {
   Smartphone,
   User,
   Info,
-  Sparkles,
   Link2,
+  Globe,
 } from 'lucide-react';
-import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl } from '../utils/driverLink';
+import {
+  getPemuatPortalUrl,
+  getWhatsAppSharePemuatUrl,
+  copyTextToClipboard,
+  getAvailableBaseUrls,
+  getPreferredBaseUrl,
+  setPreferredBaseUrl,
+} from '../utils/driverLink';
 
 interface SharePemuatModalProps {
   isOpen: boolean;
@@ -31,20 +38,25 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
   const [selectedPemuat, setSelectedPemuat] = useState<string>('');
   const [customPhone, setCustomPhone] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [baseOrigin, setBaseOrigin] = useState<string>(() => getPreferredBaseUrl());
 
   if (!isOpen) return null;
 
-  const currentPortalUrl = getPemuatPortalUrl(selectedPemuat || undefined);
+  const availableBaseUrls = getAvailableBaseUrls();
+  const currentPortalUrl = getPemuatPortalUrl(selectedPemuat || undefined, baseOrigin);
   const waShareUrl = getWhatsAppSharePemuatUrl({
     pemuatName: selectedPemuat || undefined,
     phone: customPhone || undefined,
     directUrl: currentPortalUrl,
   });
 
-  const handleCopyLink = () => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(currentPortalUrl);
-    }
+  const handleSelectBaseOrigin = (url: string) => {
+    setBaseOrigin(url);
+    setPreferredBaseUrl(url);
+  };
+
+  const handleCopyLink = async () => {
+    await copyTextToClipboard(currentPortalUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -53,8 +65,6 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
     if (onOpenPreview) {
       onOpenPreview(selectedPemuat || undefined);
       onClose();
-    } else {
-      window.open(currentPortalUrl, '_blank');
     }
   };
 
@@ -73,11 +83,11 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
                   Link Khusus Akses Pemuat
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Terisolasi
+                  Terkunci
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Bagi tautan khusus untuk pemuat di lapangan tanpa membuka data admin
+                Bagi tautan khusus untuk pemuat melihat hasil tanpa membuka data admin
               </p>
             </div>
           </div>
@@ -103,6 +113,33 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
               </p>
             </div>
           </div>
+
+          {/* Pilihan Domain Link (Jika dibuka dari Preview vs Web Utama) */}
+          {availableBaseUrls.length > 1 && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                Alamat Domain Link:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {availableBaseUrls.map((item) => (
+                  <button
+                    key={item.url}
+                    type="button"
+                    onClick={() => handleSelectBaseOrigin(item.url)}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border text-left transition ${
+                      baseOrigin === item.url
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-bold'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="truncate">{item.label}</div>
+                    <div className="text-[10px] font-mono text-slate-400 truncate">{item.url}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Target Pemuat Selector */}
           <div>
@@ -160,9 +197,13 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
               Tautan Khusus Pemuat (Siap Dibagikan):
             </label>
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 font-mono text-xs text-emerald-400 truncate select-all">
-                {currentPortalUrl}
-              </div>
+              <input
+                type="text"
+                readOnly
+                value={currentPortalUrl}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 font-mono text-xs text-emerald-400 truncate outline-none select-all"
+              />
               <button
                 type="button"
                 onClick={handleCopyLink}
@@ -222,11 +263,11 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
             <button
               type="button"
               onClick={handleOpenDirect}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-lg shadow-emerald-500/20"
             >
-              <Smartphone className="w-4 h-4 text-emerald-400" />
-              <span>Buka Pratinjau Tampilan Pemuat (Mode Terisolasi)</span>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+              <Smartphone className="w-4 h-4" />
+              <span>Buka Portal Pemuat Sekarang (Mode Terkunci)</span>
+              <ExternalLink className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

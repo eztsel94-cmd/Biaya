@@ -21,9 +21,10 @@ import { SettingsView } from './components/SettingsView';
 import { MonthlyReportView } from './components/MonthlyReportView';
 import {
   findTruckFromUrlQuery,
+  buildVirtualTruckFromQuery,
   extractDriverQueryFromLocation,
   extractPemuatPortalFromLocation,
-  getPemuatPortalUrl,
+  safeUpdateBrowserUrl,
 } from './utils/driverLink';
 import {
   api,
@@ -326,48 +327,58 @@ export default function App() {
   // Helper untuk membuka portal pemuat terkunci dan memperbarui URL tanpa reload
   const handleEnterPemuatPortal = (pemuatName?: string) => {
     const cleanName = (pemuatName || '').trim();
+    setDriverPortalTruckId(null);
+    setDriverPortalQuery(null);
     setPemuatPortalName(cleanName);
     setIsPemuatPortalMode(true);
-    if (typeof window !== 'undefined' && window.history.pushState) {
-      const targetUrl = getPemuatPortalUrl(cleanName || undefined);
-      window.history.pushState({ path: targetUrl }, '', targetUrl);
-    }
+    const queryStr = cleanName
+      ? `?portal=pemuat&nama=${encodeURIComponent(cleanName)}`
+      : '?portal=pemuat';
+    safeUpdateBrowserUrl(queryStr);
   };
 
   // Helper untuk keluar dari portal pemuat (setelah verifikasi PIN Admin TRAKSI_001) menuju Beranda Utama
   const handleExitPemuatPortal = () => {
-    if (typeof window !== 'undefined' && window.history.pushState) {
-      const cleanUrl = window.location.origin + window.location.pathname;
-      window.history.pushState({ path: cleanUrl }, '', cleanUrl);
-    }
+    safeUpdateBrowserUrl('/');
     setIsPemuatPortalMode(false);
     setActiveTab('daily_records');
   };
 
   // Helper untuk membuka portal supir dan memperbarui URL tanpa reload
   const handleEnterDriverPortal = (truckId: string) => {
+    setIsPemuatPortalMode(false);
     setDriverPortalTruckId(truckId);
     const target = trucks.find((t) => t.id === truckId);
     if (target) {
       setDriverPortalQuery(target.code);
-      if (typeof window !== 'undefined' && window.history.pushState) {
-        const cleanCode = target.code.replace(/[\s\-_]+/g, '');
-        const cleanUrl = `${window.location.origin}${window.location.pathname}?dt=${encodeURIComponent(cleanCode)}&id=${encodeURIComponent(target.id)}`;
-        window.history.pushState({ path: cleanUrl }, '', cleanUrl);
-      }
+      const cleanCode = String(target.code || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      safeUpdateBrowserUrl(`?dt=${encodeURIComponent(cleanCode)}&id=${encodeURIComponent(target.id)}`);
     }
   };
 
-  // 3. IF IN DEDICATED DRIVER PORTAL MODE:
+  // 3A. IF IN DEDICATED PEMUAT PORTAL MODE (TERKUNCI & HANYA LIHAT HASIL):
+  if (isPemuatPortalMode || activeTab === 'pemuat_portal') {
+    return (
+      <PemuatPortalView
+        trucks={trucks}
+        initialPemuatName={pemuatPortalName}
+        onExitToAdmin={handleExitPemuatPortal}
+      />
+    );
+  }
+
+  // 3B. IF IN DEDICATED DRIVER PORTAL MODE:
   // Render ONLY this driver's Dump Truck data!
   const activeDriverTruck = React.useMemo(() => {
     if (driverPortalTruckId) {
       const match = trucks.find((t) => t.id === driverPortalTruckId);
       if (match) return match;
     }
-    if (driverPortalQuery) {
+    if (driverPortalQuery && driverPortalQuery !== 'PILIH_UNIT') {
       const match = findTruckFromUrlQuery(trucks, driverPortalQuery);
       if (match) return match;
+      // Fallback langsung agar halaman supir tampil seketika tanpa layar hitam selagi Firestore memuat
+      return buildVirtualTruckFromQuery(driverPortalQuery);
     }
     return null;
   }, [trucks, driverPortalTruckId, driverPortalQuery]);
@@ -376,19 +387,8 @@ export default function App() {
   const [unmatchedPinInput, setUnmatchedPinInput] = useState('');
   const [unmatchedPinError, setUnmatchedPinError] = useState(false);
 
-  // Jika URL memiliki parameter supir (?dt=...) tetapi unit belum cocok / sedang dimuat dari Firestore,
-  // JANGAN PERNAH beralih otomatis ke Beranda Admin! Tetap kunci di layar Portal Supir.
+  // Jika URL adalah ?dt= kosong (PILIH_UNIT), tampilkan kartu pemilihan unit armada secara langsung
   if (driverPortalQuery && !activeDriverTruck) {
-    if (trucks.length === 0) {
-      return (
-        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
-          <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-          <h2 className="text-white font-bold text-lg">Membuka Portal Supir...</h2>
-          <p className="text-slate-400 text-xs mt-1">Menghubungkan unit armada Dump Truck ke cloud Firestore...</p>
-        </div>
-      );
-    }
-
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-center space-y-4">
@@ -398,21 +398,28 @@ export default function App() {
           <div>
             <h2 className="text-lg font-bold text-white">Portal Khusus Supir — Traksi KPU</h2>
             <p className="text-xs text-slate-400 mt-1">
-              Kode unit <span className="text-emerald-400 font-mono font-bold">{driverPortalQuery}</span> belum dipilih. Silakan pilih unit kendaraan Anda di bawah ini:
+              Silakan pilih unit kendaraan Anda di bawah ini untuk melihat rincian biaya operasional:
             </p>
           </div>
-          <div className="max-h-60 overflow-y-auto grid grid-cols-2 gap-2 text-left pt-1">
-            {trucks.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => handleEnterDriverPortal(t.id)}
-                className="p-2.5 rounded-xl bg-slate-950 hover:bg-emerald-950/50 border border-slate-800 hover:border-emerald-500/40 transition flex flex-col"
-              >
-                <span className="text-xs font-black text-white font-mono">{t.code}</span>
-                <span className="text-[11px] text-slate-400 truncate">{t.driverName}</span>
-              </button>
-            ))}
-          </div>
+          {trucks.length === 0 ? (
+            <div className="py-6 flex flex-col items-center justify-center gap-2 text-slate-400">
+              <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs">Memuat daftar armada dari cloud Firestore...</span>
+            </div>
+          ) : (
+            <div className="max-h-60 overflow-y-auto grid grid-cols-2 gap-2 text-left pt-1">
+              {trucks.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => handleEnterDriverPortal(t.id)}
+                  className="p-2.5 rounded-xl bg-slate-950 hover:bg-emerald-950/50 border border-slate-800 hover:border-emerald-500/40 transition flex flex-col"
+                >
+                  <span className="text-xs font-black text-white font-mono">{t.code}</span>
+                  <span className="text-[11px] text-slate-400 truncate">{t.driverName}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {!unmatchedPinPrompt ? (
             <div className="pt-3 border-t border-slate-800 flex justify-center">
@@ -453,10 +460,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     if (unmatchedPinInput.trim().toUpperCase() === 'TRAKSI_001') {
-                      if (typeof window !== 'undefined' && window.history.pushState) {
-                        const cleanUrl = window.location.origin + window.location.pathname;
-                        window.history.pushState({ path: cleanUrl }, '', cleanUrl);
-                      }
+                      safeUpdateBrowserUrl('/');
                       setDriverPortalTruckId(null);
                       setDriverPortalQuery(null);
                       setUnmatchedPinPrompt(false);
@@ -509,10 +513,7 @@ export default function App() {
           currentUser={currentUser}
           onOpenAddExpense={(truckId) => handleOpenAddExpense(truckId)}
           onExitDriverMode={() => {
-            if (typeof window !== 'undefined' && window.history.pushState) {
-              const cleanUrl = window.location.origin + window.location.pathname;
-              window.history.pushState({ path: cleanUrl }, '', cleanUrl);
-            }
+            safeUpdateBrowserUrl('/');
             setDriverPortalTruckId(null);
             setDriverPortalQuery(null);
             setActiveTab('daily_records');
@@ -528,17 +529,6 @@ export default function App() {
           onAddExpense={handleAddExpense}
         />
       </>
-    );
-  }
-
-  // 3B. IF IN DEDICATED PEMUAT PORTAL MODE (TERKUNCI & HANYA LIHAT HASIL):
-  if (isPemuatPortalMode || activeTab === 'pemuat_portal') {
-    return (
-      <PemuatPortalView
-        trucks={trucks}
-        initialPemuatName={pemuatPortalName}
-        onExitToAdmin={handleExitPemuatPortal}
-      />
     );
   }
 

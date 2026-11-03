@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory } from '../types/truck';
 import { formatRupiah, formatNumber, formatDateIndo } from '../utils/formatters';
 import { CATEGORIES, CATEGORY_COLORS } from '../data/initialData';
-import { getDriverPortalUrl, getWhatsAppShareUrl } from '../utils/driverLink';
+import { getDriverPortalUrl, getWhatsAppShareUrl, copyTextToClipboard } from '../utils/driverLink';
 import {
   Truck,
   User,
@@ -66,10 +66,8 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
 
   const totalAllCost = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const handleCopyLink = (url: string, truckId: string) => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(url);
-    }
+  const handleCopyLink = async (url: string, truckId: string) => {
+    await copyTextToClipboard(url);
     setCopiedTruckId(truckId);
     setTimeout(() => {
       setCopiedTruckId((curr) => (curr === truckId ? null : curr));
@@ -263,7 +261,7 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
                   {CATEGORIES.map((cat) => {
                     const amount = catSums[cat];
                     const catPct = unitTotal > 0 ? (amount / unitTotal) * 100 : 0;
-                    const colors = CATEGORY_COLORS[cat];
+                    const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.Sparepart;
                     return (
                       <div key={cat} className="space-y-1">
                         <div className="flex items-center justify-between text-xs font-medium">
@@ -484,7 +482,7 @@ export const TrucksView: React.FC<TrucksViewProps> = ({
                           {trkExps
                             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                             .map((exp) => {
-                              const colors = CATEGORY_COLORS[exp.category];
+                              const colors = CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.Sparepart;
                               return (
                                 <div key={exp.id} className="p-3.5 hover:bg-slate-800/40 transition">
                                   <div className="flex items-center justify-between text-xs mb-1">

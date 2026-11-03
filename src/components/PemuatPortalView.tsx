@@ -33,7 +33,12 @@ import {
   subscribeToDailyRecords,
   subscribeToFirestorePemuat,
 } from '../services/firebase';
-import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl } from '../utils/driverLink';
+import {
+  getPemuatPortalUrl,
+  getWhatsAppSharePemuatUrl,
+  safeUpdateBrowserUrl,
+  copyTextToClipboard,
+} from '../utils/driverLink';
 import { getTodayWIB, getWIBDateParts, getDaysAgoWIB } from '../utils/formatters';
 
 export const INDO_MONTHS = [
@@ -209,18 +214,16 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   // Saat memilih nama pemuat, perbarui URL tetap di ?portal=pemuat tanpa pindah ke beranda
   const handleSelectPemuat = (name: string) => {
     setSelectedPemuat(name);
-    if (typeof window !== 'undefined' && window.history.replaceState) {
-      const nextUrl = getPemuatPortalUrl(name || undefined);
-      window.history.replaceState({ path: nextUrl }, '', nextUrl);
-    }
+    const queryStr = name && name.trim()
+      ? `?portal=pemuat&nama=${encodeURIComponent(name.trim())}`
+      : '?portal=pemuat';
+    safeUpdateBrowserUrl(queryStr, true);
   };
 
   // Copy Link Khusus Pemuat
-  const handleCopyLink = () => {
+  const handleCopyLink = async () => {
     const url = getPemuatPortalUrl(selectedPemuat || undefined);
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(url);
-    }
+    await copyTextToClipboard(url);
     setIsCopied(true);
     showToast('Link Portal Pemuat berhasil disalin!', 'success');
     setTimeout(() => setIsCopied(false), 2500);
@@ -244,24 +247,29 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   // Catatan yang cocok dengan Pemuat yang dipilih & pencarian
   const pemuatFilteredRecords = useMemo(() => {
     return records.filter((r) => {
+      const driverNameStr = String(r.driverName || '');
+      const truckNumberStr = String(r.truckNumber || '');
+      const afdelingStr = String(r.afdeling || '');
+      const notesStr = String(r.notes || '');
+
       if (selectedPemuat) {
-        const parts = r.driverName
+        const parts = driverNameStr
           .split('/')
           .map((p) => p.trim().toLowerCase());
         const target = selectedPemuat.trim().toLowerCase();
         const isMatch =
-          parts.includes(target) || r.driverName.toLowerCase().includes(target);
+          parts.includes(target) || driverNameStr.toLowerCase().includes(target);
         if (!isMatch) return false;
       }
-      if (filterTruck !== 'ALL' && r.truckNumber.toUpperCase() !== filterTruck.toUpperCase()) {
+      if (filterTruck !== 'ALL' && truckNumberStr.toUpperCase() !== filterTruck.toUpperCase()) {
         return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchTruck = r.truckNumber.toLowerCase().includes(q);
-        const matchDriver = r.driverName.toLowerCase().includes(q);
-        const matchAfdeling = r.afdeling.toLowerCase().includes(q);
-        const matchNotes = (r.notes || '').toLowerCase().includes(q);
+        const matchTruck = truckNumberStr.toLowerCase().includes(q);
+        const matchDriver = driverNameStr.toLowerCase().includes(q);
+        const matchAfdeling = afdelingStr.toLowerCase().includes(q);
+        const matchNotes = notesStr.toLowerCase().includes(q);
         if (!matchTruck && !matchDriver && !matchAfdeling && !matchNotes) return false;
       }
       return true;
@@ -271,14 +279,15 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   // Catatan terfilter untuk tampilan Daftar Riwayat (mengikuti filter periode)
   const tableFilteredRecords = useMemo(() => {
     return pemuatFilteredRecords.filter((r) => {
+      const dateStr = String(r.date || '');
       if (filterDateRange === 'TODAY') {
-        if (r.date !== todayStr) return false;
+        if (dateStr !== todayStr) return false;
       } else if (filterDateRange === '7DAYS') {
         const sevenDaysAgo = getDaysAgoWIB(7);
-        if (r.date < sevenDaysAgo) return false;
+        if (dateStr < sevenDaysAgo) return false;
       } else if (filterDateRange === 'THIS_MONTH') {
         const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
-        if (!r.date.startsWith(curYearMonth)) return false;
+        if (!dateStr.startsWith(curYearMonth)) return false;
       }
       return true;
     });

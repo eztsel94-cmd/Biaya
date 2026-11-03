@@ -291,6 +291,34 @@ export async function deleteTruckFirestore(id: string, deleteRelated: boolean): 
 // 2. MODUL BIAYA UNIT (onSnapshot Real-time)
 // ==========================================
 
+// Kategori aman untuk kompatibilitas mundur dengan deployment lama (mencegah layar hitam di biaya-three.vercel.app)
+const LEGACY_SAFE_CATEGORIES = new Set([
+  "Fuel",
+  "Lubricant",
+  "Sparepart",
+  "Workshop",
+  "BPJS",
+  "Jamsostek",
+]);
+
+export function toLegacySafeCategory(cat: ExpenseRecord["category"]): string {
+  if (LEGACY_SAFE_CATEGORIES.has(cat)) return cat;
+  switch (cat) {
+    case "Tyre & Tubes":
+      return "Sparepart";
+    case "Workshop":
+      return "Workshop";
+    case "Potongan Mangkir":
+      return "BPJS";
+    case "Beras":
+      return "Jamsostek";
+    case "Supir":
+      return "BPJS";
+    default:
+      return "Sparepart";
+  }
+}
+
 export function normalizeExpenseCategory(raw: any): ExpenseRecord["category"] {
   const val = String(raw || "").trim();
   const lower = val.toLowerCase();
@@ -320,6 +348,7 @@ export function subscribeToFirestoreExpenses(
 
         const items: ExpenseRecord[] = [];
         const sampleRefsToDelete: any[] = [];
+        const docsToHealCategory: Array<{ ref: any; safeCat: string; realCat: string }> = [];
 
         snapshot.forEach((docSnapshot) => {
           const d = docSnapshot.data();
@@ -333,17 +362,34 @@ export function subscribeToFirestoreExpenses(
             return;
           }
 
+          const resolvedCategory = normalizeExpenseCategory(d.realCategory || d.category);
+          const safeCategory = toLegacySafeCategory(resolvedCategory);
+
+          // Jika dokumen di Firestore masih menyimpan kategori baru langsung di field `category`,
+          // otomatis perbaiki agar aplikasi di domain lama tidak pernah mengalami crash layar hitam
+          if (!LEGACY_SAFE_CATEGORIES.has(String(d.category || ""))) {
+            docsToHealCategory.push({
+              ref: docSnapshot.ref,
+              safeCat: safeCategory,
+              realCat: resolvedCategory,
+            });
+          }
+
           items.push({
             id: docSnapshot.id,
-            truckId: d.truckId || "",
-            category: normalizeExpenseCategory(d.category),
+            truckId: String(d.truckId || ""),
+            category: resolvedCategory,
             amount: typeof d.amount === "number" ? d.amount : parseFloat(d.amount) || 0,
-            date: d.date || new Date().toISOString().split("T")[0],
-            description: d.description || "-",
-            vendor: d.vendor || "",
-            invoiceNumber: d.invoiceNumber || undefined,
-            createdByName: d.createdByName || undefined,
-            createdAt: d.createdAt ? (typeof d.createdAt.toDate === 'function' ? d.createdAt.toDate().toISOString() : String(d.createdAt)) : new Date().toISOString(),
+            date: String(d.date || new Date().toISOString().split("T")[0]),
+            description: String(d.description || "-"),
+            vendor: String(d.vendor || ""),
+            invoiceNumber: d.invoiceNumber ? String(d.invoiceNumber) : undefined,
+            createdByName: d.createdByName ? String(d.createdByName) : undefined,
+            createdAt: d.createdAt
+              ? typeof d.createdAt.toDate === "function"
+                ? d.createdAt.toDate().toISOString()
+                : String(d.createdAt)
+              : new Date().toISOString(),
           });
         });
 
@@ -351,6 +397,17 @@ export function subscribeToFirestoreExpenses(
           const batch = writeBatch(db);
           sampleRefsToDelete.forEach((ref) => batch.delete(ref));
           batch.commit().catch((err) => console.warn("Gagal membersihkan biaya contoh lama:", err));
+        }
+
+        if (docsToHealCategory.length > 0) {
+          const healBatch = writeBatch(db);
+          docsToHealCategory.slice(0, 450).forEach((item) => {
+            healBatch.update(item.ref, {
+              category: item.safeCat,
+              realCategory: item.realCat,
+            });
+          });
+          healBatch.commit().catch((err) => console.warn("Gagal menyelaraskan kompatibilitas kategori:", err));
         }
 
         onData(items);
@@ -376,12 +433,15 @@ export async function bootstrapInitialExpenses(): Promise<void> {
 export async function addExpenseFirestore(
   expense: Omit<ExpenseRecord, "id" | "createdAt">
 ): Promise<ExpenseRecord> {
+  const realCat = normalizeExpenseCategory(expense.category);
+  const safeCat = toLegacySafeCategory(realCat);
   const docRef = await addDoc(expensesCollection, {
     truckId: expense.truckId,
-    category: expense.category,
-    amount: Number(expense.amount),
+    category: safeCat,
+    realCategory: realCat,
+    amount: Number(expense.amount) || 0,
     date: expense.date,
-    description: expense.description.trim(),
+    description: (expense.description || "-").trim(),
     vendor: (expense.vendor || "Gudang Traksi").trim(),
     invoiceNumber: (expense.invoiceNumber || "").trim(),
     createdByName: expense.createdByName || "Kasir / Admin",
@@ -389,25 +449,32 @@ export async function addExpenseFirestore(
   });
   return {
     ...expense,
+    category: realCat,
     id: docRef.id,
     createdAt: new Date().toISOString(),
   };
 }
 
 export async function updateExpenseFirestore(expense: ExpenseRecord): Promise<ExpenseRecord> {
+  const realCat = normalizeExpenseCategory(expense.category);
+  const safeCat = toLegacySafeCategory(realCat);
   const docRef = doc(db, COLLECTIONS.EXPENSES, expense.id);
   await updateDoc(docRef, {
     truckId: expense.truckId,
-    category: expense.category,
-    amount: Number(expense.amount),
+    category: safeCat,
+    realCategory: realCat,
+    amount: Number(expense.amount) || 0,
     date: expense.date,
-    description: expense.description.trim(),
+    description: (expense.description || "-").trim(),
     vendor: (expense.vendor || "Gudang Traksi").trim(),
     invoiceNumber: (expense.invoiceNumber || "").trim(),
     updatedByName: expense.updatedByName || "",
     updatedAt: serverTimestamp(),
   });
-  return expense;
+  return {
+    ...expense,
+    category: realCat,
+  };
 }
 
 export async function deleteExpenseFirestore(id: string): Promise<void> {
@@ -423,12 +490,15 @@ export async function addExpensesBatchFirestore(
 
   for (const item of items) {
     const newDocRef = doc(expensesCollection);
+    const realCat = normalizeExpenseCategory(item.category);
+    const safeCat = toLegacySafeCategory(realCat);
     batch.set(newDocRef, {
       truckId: item.truckId,
-      category: item.category,
-      amount: Number(item.amount),
+      category: safeCat,
+      realCategory: realCat,
+      amount: Number(item.amount) || 0,
       date: item.date,
-      description: item.description.trim(),
+      description: (item.description || "-").trim(),
       vendor: (item.vendor || "Gudang Traksi").trim(),
       invoiceNumber: (item.invoiceNumber || "").trim(),
       createdByName: item.createdByName || "Impor Excel",
@@ -436,6 +506,7 @@ export async function addExpensesBatchFirestore(
     });
     created.push({
       ...item,
+      category: realCat,
       id: newDocRef.id,
       createdAt: new Date().toISOString(),
     });
@@ -759,12 +830,15 @@ export async function importAllFirestoreData(data: {
   if (Array.isArray(data.expenses)) {
     data.expenses.forEach((e) => {
       const docRef = doc(db, COLLECTIONS.EXPENSES, e.id);
+      const realCat = normalizeExpenseCategory(e.category);
+      const safeCat = toLegacySafeCategory(realCat);
       batch.set(docRef, {
         truckId: e.truckId,
-        category: e.category,
-        amount: Number(e.amount),
+        category: safeCat,
+        realCategory: realCat,
+        amount: Number(e.amount) || 0,
         date: e.date,
-        description: e.description,
+        description: e.description || "-",
         vendor: e.vendor || "Gudang Traksi",
         invoiceNumber: e.invoiceNumber || "",
         createdByName: e.createdByName || "Import Backup",

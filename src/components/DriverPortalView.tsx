@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { TruckUnit, ExpenseRecord, ExpenseCategory, AppUser } from '../types/truck';
 import { formatRupiah, formatDateIndo, getWIBDateParts } from '../utils/formatters';
 import { CATEGORIES, CATEGORY_COLORS } from '../data/initialData';
-import { getDriverPortalUrl, getWhatsAppShareUrl } from '../utils/driverLink';
+import { getDriverPortalUrl, getWhatsAppShareUrl, copyTextToClipboard } from '../utils/driverLink';
 import {
   Truck,
   Fuel,
@@ -189,10 +189,8 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
   const driverUrl = getDriverPortalUrl(truck);
   const waUrl = getWhatsAppShareUrl(truck, driverUrl);
 
-  const handleCopyLink = () => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(driverUrl);
-    }
+  const handleCopyLink = async () => {
+    await copyTextToClipboard(driverUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   };
@@ -526,9 +524,9 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {CATEGORIES.map((cat) => {
-              const amount = categorySums[cat];
+              const amount = categorySums[cat] || 0;
               const pct = periodUnitCost > 0 ? (amount / periodUnitCost) * 100 : 0;
-              const colors = CATEGORY_COLORS[cat];
+              const colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.Sparepart;
               const isSelected = selectedCategory === cat;
 
               return (
@@ -622,7 +620,7 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
           ) : (
             <div className="divide-y divide-slate-800/80">
               {filteredExpenses.map((exp) => {
-                const colors = CATEGORY_COLORS[exp.category];
+                const colors = CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.Sparepart;
                 return (
                   <div
                     key={exp.id}

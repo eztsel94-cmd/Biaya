@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { TruckUnit } from '../types/truck';
-import { getDriverPortalUrl, getWhatsAppShareUrl } from '../utils/driverLink';
+import { getDriverPortalUrl, getWhatsAppShareUrl, copyTextToClipboard } from '../utils/driverLink';
 import {
   X,
   Download,
@@ -186,10 +186,8 @@ export const DriverQrCodeModal: React.FC<DriverQrCodeModalProps> = ({
   const directUrl = getDriverPortalUrl(truck);
   const waUrl = getWhatsAppShareUrl(truck, directUrl);
 
-  const handleCopyLink = () => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(directUrl);
-    }
+  const handleCopyLink = async () => {
+    await copyTextToClipboard(directUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };

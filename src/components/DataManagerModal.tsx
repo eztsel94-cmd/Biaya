@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TruckUnit, ExpenseRecord, TruckStatus } from '../types/truck';
-import { getDriverPortalUrl, getWhatsAppShareUrl } from '../utils/driverLink';
+import { getDriverPortalUrl, getWhatsAppShareUrl, copyTextToClipboard } from '../utils/driverLink';
 import {
   Database,
   Truck,
@@ -82,10 +82,8 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
     setTimeout(() => setActionNotice(null), 4500);
   };
 
-  const handleCopyLink = (url: string, truckId: string) => {
-    if (navigator?.clipboard?.writeText) {
-      navigator.clipboard.writeText(url);
-    }
+  const handleCopyLink = async (url: string, truckId: string) => {
+    await copyTextToClipboard(url);
     setCopiedTruckId(truckId);
     setTimeout(() => {
       setCopiedTruckId((curr) => (curr === truckId ? null : curr));
