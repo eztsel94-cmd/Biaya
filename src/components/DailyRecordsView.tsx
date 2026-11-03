@@ -324,9 +324,10 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast('Mohon pilih atau masukkan Nama Pemuat (bisa lebih dari satu, contoh: ANTON/DELFIN/YUVEN)', 'error');
       return;
     }
-    const ton = parseFloat(String(formData.tonnage).replace(',', '.'));
-    if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
+    const rawTonStr = String(formData.tonnage ?? '').trim().replace(',', '.');
+    const ton = rawTonStr === '' ? 0 : parseFloat(rawTonStr);
+    if (isNaN(ton) || ton < 0) {
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79) atau kosongkan', 'error');
       return;
     }
 
@@ -342,7 +343,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         notes: (formData.notes || '').trim(),
       });
 
-      showToast(`Data pengiriman ${formData.truckNumber} - Rit ${nextRitNumber} (${formData.afdeling}, ${ton} Ton) berhasil tersimpan ke Firestore!`, 'success');
+      const tonLabel = ton > 0 ? `${ton} Ton` : 'Tanpa Tonase / 0 Ton';
+      showToast(`Data pengiriman ${formData.truckNumber} - Rit ${nextRitNumber} (${formData.afdeling}, ${tonLabel}) berhasil tersimpan ke Firestore!`, 'success');
 
       // Reset form tapi pertahankan tanggal dan afdeling untuk memudahkan input berulang
       setFormData((prev) => ({
@@ -378,9 +380,10 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast('Mohon masukkan Nama Pemuat (contoh: Anton)', 'error');
       return;
     }
-    const ton = parseFloat(String(editFormData.tonnage).replace(',', '.'));
-    if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
+    const rawTonStr = String(editFormData.tonnage ?? '').trim().replace(',', '.');
+    const ton = rawTonStr === '' ? 0 : parseFloat(rawTonStr);
+    if (isNaN(ton) || ton < 0) {
+      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79) atau kosongkan', 'error');
       return;
     }
 
@@ -1205,76 +1208,6 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         </div>
       </div>
 
-      {/* Monitoring Urutan Ritase Otomatis per Afdeling */}
-      {afdelingRitBreakdown.length > 0 && (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-            <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-sky-500/15 text-sky-400 border border-sky-500/30">
-                <Truck className="w-4 h-4" />
-              </span>
-              <div>
-                <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                  <span>Rekap Urutan Ritase per Afdeling</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                    Otomatis Terpisah
-                  </span>
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  Pantau urutan rit pertama hingga terakhir khusus untuk setiap afdeling secara terpisah
-                </p>
-              </div>
-            </div>
-            <div className="text-[11px] text-slate-400 font-mono">
-              Total {afdelingRitBreakdown.length} Afdeling Aktif
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {afdelingRitBreakdown.map((afdGroup) => (
-              <div
-                key={afdGroup.afdeling}
-                className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5 hover:border-slate-700 transition"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="font-bold text-xs sm:text-sm text-white">{afdGroup.afdeling}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                      {afdGroup.totalRit} Rit
-                    </span>
-                    <span className="text-xs font-mono font-bold text-slate-300">
-                      {afdGroup.totalTons.toFixed(2)} T
-                    </span>
-                  </div>
-                </div>
-
-                {/* Urutan Rit Pertama hingga Terakhir */}
-                <div className="flex flex-wrap gap-1.5">
-                  {afdGroup.trips.map((trip, idx) => (
-                    <div
-                      key={trip.id}
-                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono hover:border-emerald-500/40 transition"
-                      title={`${trip.truckNumber} • ${trip.driverName} • ${trip.tonnage} Ton (${formatDateIndo(trip.date)})`}
-                    >
-                      <span className="font-bold text-sky-300 bg-sky-950/90 px-1.5 py-0.5 rounded text-[10px] border border-sky-500/30">
-                        Rit {trip.ritNumber || idx + 1}
-                      </span>
-                      <span className="text-white font-semibold">{trip.truckNumber}</span>
-                      <span className="text-slate-400">&bull;</span>
-                      <span className="text-emerald-300 font-semibold">{trip.driverName}</span>
-                      <span className="text-emerald-400 font-bold">({trip.tonnage}T)</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Grid Utama: Form Input Harian & Tabel Riwayat */}
       <div ref={formSectionRef} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Kolom Kiri: Form Input Data Harian Sederhana (5/12) */}
@@ -1431,12 +1364,13 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 </p>
               </div>
 
-              {/* Tonase (Ton) */}
+              {/* Tonase (Ton) - Opsional */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                    Tonase (Tonase dalam Ton)
+                    <span>Tonase (Ton)</span>
+                    <span className="text-[10px] font-normal lowercase text-slate-400">(opsional / bisa menyusul)</span>
                   </label>
                   {formData.tonnage && (
                     <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
@@ -1448,10 +1382,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   <input
                     type="text"
                     inputMode="decimal"
-                    placeholder="Contoh: 6,79"
+                    placeholder="Contoh: 6,79 (Boleh dikosongkan)"
                     value={formData.tonnage}
                     onChange={(e) => handleTonInputChange(e.target.value, false)}
-                    required
                     className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">
@@ -1941,6 +1874,76 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         </div>
       </div>
 
+      {/* Monitoring Urutan Ritase Otomatis per Afdeling (Di Bawah Form & Riwayat Input) */}
+      {afdelingRitBreakdown.length > 0 && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                <Truck className="w-4 h-4" />
+              </span>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <span>Rekap Urutan Ritase per Afdeling</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                    Otomatis Terpisah
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Pantau urutan rit pertama hingga terakhir khusus untuk setiap afdeling secara terpisah
+                </p>
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-400 font-mono">
+              Total {afdelingRitBreakdown.length} Afdeling Aktif
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {afdelingRitBreakdown.map((afdGroup) => (
+              <div
+                key={afdGroup.afdeling}
+                className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5 hover:border-slate-700 transition"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="font-bold text-xs sm:text-sm text-white">{afdGroup.afdeling}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      {afdGroup.totalRit} Rit
+                    </span>
+                    <span className="text-xs font-mono font-bold text-slate-300">
+                      {afdGroup.totalTons.toFixed(2)} T
+                    </span>
+                  </div>
+                </div>
+
+                {/* Urutan Rit Pertama hingga Terakhir */}
+                <div className="flex flex-wrap gap-1.5">
+                  {afdGroup.trips.map((trip, idx) => (
+                    <div
+                      key={trip.id}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono hover:border-emerald-500/40 transition"
+                      title={`${trip.truckNumber} • ${trip.driverName} • ${trip.tonnage} Ton (${formatDateIndo(trip.date)})`}
+                    >
+                      <span className="font-bold text-sky-300 bg-sky-950/90 px-1.5 py-0.5 rounded text-[10px] border border-sky-500/30">
+                        Rit {trip.ritNumber || idx + 1}
+                      </span>
+                      <span className="text-white font-semibold">{trip.truckNumber}</span>
+                      <span className="text-slate-400">&bull;</span>
+                      <span className="text-emerald-300 font-semibold">{trip.driverName}</span>
+                      <span className="text-emerald-400 font-bold">({trip.tonnage}T)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Modal Edit Data Harian TBS */}
       {recordToEdit && editFormData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
@@ -2084,19 +2087,20 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   </p>
                 </div>
 
-                {/* Tonase (Ton) */}
+                {/* Tonase (Ton) - Opsional */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                     <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                    Tonase (Ton)
+                    <span>Tonase (Ton)</span>
+                    <span className="text-[10px] font-normal lowercase text-slate-400">(opsional)</span>
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       inputMode="decimal"
+                      placeholder="Contoh: 6,79 (Boleh kosong)"
                       value={editFormData.tonnage}
                       onChange={(e) => handleTonInputChange(e.target.value, true)}
-                      required
                       className="w-full px-3.5 py-2.5 pr-14 bg-slate-800/80 border border-slate-700 rounded-xl text-white font-mono font-bold text-base focus:outline-none focus:border-emerald-500 transition"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-1 rounded">

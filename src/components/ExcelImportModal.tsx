@@ -25,9 +25,12 @@ import {
   Truck,
   Disc,
   Wheat,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { TruckUnit, ExpenseCategory, ExpenseRecord } from '../types/truck';
-import { formatRupiah, formatNumber } from '../utils/formatters';
+import { formatRupiah, formatNumber, getTodayWIB, getWIBDateParts } from '../utils/formatters';
 import { CATEGORIES, CATEGORY_COLORS } from '../data/initialData';
 import {
   parsePastedExcelText,
@@ -38,6 +41,21 @@ import {
   UnitCostBreakdown,
 } from '../utils/excelParser';
 import * as XLSX from 'xlsx';
+
+const MONTH_NAMES_ID = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+];
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -73,6 +91,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [autoHideNonDt, setAutoHideNonDt] = useState<boolean>(true);
   const [rejectedNonDtCount, setRejectedNonDtCount] = useState<number>(0);
 
+  // Fitur Pilih Bulan & Tanggal Pencatatan Biaya (agar bisa menaruh biaya ke bulan sebelumnya)
+  const [targetYear, setTargetYear] = useState<number>(() => getWIBDateParts().year);
+  const [targetMonth, setTargetMonth] = useState<number>(() => getWIBDateParts().monthIndex);
+  const [targetDate, setTargetDate] = useState<string>(() => getTodayWIB());
+
   // Parsed items & breakdown state
   const [parsedItems, setParsedItems] = useState<ParsedExpenseItem[]>([]);
   const [manualItems, setManualItems] = useState<ParsedExpenseItem[]>([]);
@@ -87,11 +110,76 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
   if (!isOpen) return null;
 
+  const wibCurrent = getWIBDateParts();
+  const prevMonthIndex = wibCurrent.monthIndex === 0 ? 11 : wibCurrent.monthIndex - 1;
+  const prevMonthYear = wibCurrent.monthIndex === 0 ? wibCurrent.year - 1 : wibCurrent.year;
+  const twoMonthsAgoIndex = (wibCurrent.monthIndex + 10) % 12;
+  const twoMonthsAgoYear = wibCurrent.monthIndex < 2 ? wibCurrent.year - 1 : wibCurrent.year;
+
+  // Helper untuk mengubah bulan & tahun serta langsung menerapkan tanggal ke hasil pemilahan yang sudah ada
+  const handleSelectMonthYear = (newMonthIndex: number, newYear: number) => {
+    let normalizedMonth = newMonthIndex;
+    let normalizedYear = newYear;
+    if (normalizedMonth < 0) {
+      normalizedMonth = 11;
+      normalizedYear -= 1;
+    } else if (normalizedMonth > 11) {
+      normalizedMonth = 0;
+      normalizedYear += 1;
+    }
+
+    const daysInTargetMonth = new Date(normalizedYear, normalizedMonth + 1, 0).getDate();
+    const isSelectingCurrentMonth =
+      normalizedYear === wibCurrent.year && normalizedMonth === wibCurrent.monthIndex;
+
+    // Jika memilih bulan ini gunakan tanggal hari ini WIB; jika memilih bulan sebelumnya gunakan akhir bulan / tanggal valid di bulan tersebut
+    const currentDayPart = parseInt(targetDate.split('-')[2] || '1', 10) || wibCurrent.day;
+    const chosenDay = isSelectingCurrentMonth
+      ? wibCurrent.day
+      : Math.min(currentDayPart, daysInTargetMonth);
+
+    const newDateStr = `${normalizedYear}-${String(normalizedMonth + 1).padStart(2, '0')}-${String(
+      chosenDay
+    ).padStart(2, '0')}`;
+
+    setTargetMonth(normalizedMonth);
+    setTargetYear(normalizedYear);
+    setTargetDate(newDateStr);
+
+    if (parsedItems.length > 0) {
+      setParsedItems((prev) => prev.map((item) => ({ ...item, date: newDateStr })));
+    }
+    if (manualItems.length > 0) {
+      setManualItems((prev) => prev.map((item) => ({ ...item, date: newDateStr })));
+    }
+  };
+
+  const handleSelectExactDate = (newDateStr: string) => {
+    if (!newDateStr) return;
+    setTargetDate(newDateStr);
+    const parts = newDateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      if (!isNaN(y) && !isNaN(m) && m >= 0 && m <= 11) {
+        setTargetYear(y);
+        setTargetMonth(m);
+      }
+    }
+    if (parsedItems.length > 0) {
+      setParsedItems((prev) => prev.map((item) => ({ ...item, date: newDateStr })));
+    }
+    if (manualItems.length > 0) {
+      setManualItems((prev) => prev.map((item) => ({ ...item, date: newDateStr })));
+    }
+  };
+
   const runTextParse = (
     textToParse: string,
     overrideUseDefault?: boolean,
     overrideDefaultId?: string,
-    overrideHideNonDt?: boolean
+    overrideHideNonDt?: boolean,
+    overrideDefaultDate?: string
   ) => {
     setErrorMessage(null);
     setSuccessCount(null);
@@ -108,12 +196,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         : selectedDefaultTruckId || trucks[0]?.id || '';
     const effectiveHideNonDt =
       overrideHideNonDt !== undefined ? overrideHideNonDt : autoHideNonDt;
+    const effectiveDate = overrideDefaultDate || targetDate || getTodayWIB();
 
     try {
       setIsProcessing(true);
       const parseOptions = {
         useDefaultTruck: effectiveUseDefault,
         defaultTruckId: effectiveDefaultId,
+        defaultDate: effectiveDate,
       };
 
       if (textToParse.includes('\t') || (textToParse.includes(';') && !textToParse.includes(','))) {
@@ -195,6 +285,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       const { items, manualItems: mItems } = await parseExcelFile(file, trucks, {
         useDefaultTruck,
         defaultTruckId: selectedDefaultTruckId,
+        defaultDate: targetDate || getTodayWIB(),
       });
 
       if (items.length === 0 && mItems.length === 0) {
@@ -391,6 +482,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const handleUpdateRowDescription = (index: number, newDesc: string) => {
     setParsedItems((prev) =>
       prev.map((item, idx) => (idx === index ? { ...item, description: newDesc } : item))
+    );
+  };
+
+  const handleUpdateRowDate = (index: number, newDateStr: string) => {
+    if (!newDateStr) return;
+    setParsedItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, date: newDateStr } : item))
     );
   };
 
@@ -690,6 +788,129 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <Download className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Format Template Excel</span>
               </button>
+            </div>
+          </div>
+
+          {/* FITUR PILIH PERIODE BULAN & TANGGAL BIAYA (BISA MASUK KE BULAN SEBELUMNYA) */}
+          <div className="bg-slate-950/90 border border-sky-500/35 rounded-xl p-3.5 sm:p-4 space-y-3 shadow-md">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 mt-0.5">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs sm:text-sm font-bold text-white">
+                      Pilih Bulan &amp; Periode Pencatatan Biaya
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                      Periode Aktif: {MONTH_NAMES_ID[targetMonth]} {targetYear} ({targetDate})
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Pilih <strong>Bulan Sebelumnya</strong> atau bulan tertentu untuk menaruh biaya yang belum terinput ke bulan lalu.
+                  </p>
+                </div>
+              </div>
+
+              {/* Tombol Cepat: Bulan Ini, Bulan Sebelumnya, 2 Bulan Lalu */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonthYear(wibCurrent.monthIndex, wibCurrent.year)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    targetMonth === wibCurrent.monthIndex && targetYear === wibCurrent.year
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm shadow-emerald-500/20'
+                      : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800'
+                  }`}
+                >
+                  Bulan Ini ({MONTH_NAMES_ID[wibCurrent.monthIndex]})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonthYear(prevMonthIndex, prevMonthYear)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    targetMonth === prevMonthIndex && targetYear === prevMonthYear
+                      ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-sm shadow-sky-500/20'
+                      : 'bg-slate-900 text-sky-300 hover:bg-sky-950/60 border-sky-500/30'
+                  }`}
+                >
+                  &larr; Bulan Sebelumnya ({MONTH_NAMES_ID[prevMonthIndex]} {prevMonthYear})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonthYear(twoMonthsAgoIndex, twoMonthsAgoYear)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                    targetMonth === twoMonthsAgoIndex && targetYear === twoMonthsAgoYear
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
+                  }`}
+                >
+                  {MONTH_NAMES_ID[twoMonthsAgoIndex]} {twoMonthsAgoYear}
+                </button>
+              </div>
+            </div>
+
+            {/* Bar Pilih Bulan, Tahun, dan Tanggal Spesifik */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-800/80">
+              {/* Navigasi & Dropdown Bulan */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonthYear(targetMonth - 1, targetYear)}
+                  className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition cursor-pointer"
+                  title="Mundur 1 bulan"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <select
+                  value={targetMonth}
+                  onChange={(e) => handleSelectMonthYear(parseInt(e.target.value, 10), targetYear)}
+                  className="flex-1 bg-slate-900 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none cursor-pointer"
+                >
+                  {MONTH_NAMES_ID.map((mName, idx) => (
+                    <option key={mName} value={idx}>
+                      Bulan: {mName}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleSelectMonthYear(targetMonth + 1, targetYear)}
+                  className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition cursor-pointer"
+                  title="Maju 1 bulan"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Dropdown Tahun */}
+              <div>
+                <select
+                  value={targetYear}
+                  onChange={(e) => handleSelectMonthYear(targetMonth, parseInt(e.target.value, 10))}
+                  className="w-full bg-slate-900 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none cursor-pointer"
+                >
+                  {[2024, 2025, 2026, 2027, 2028].map((yr) => (
+                    <option key={yr} value={yr}>
+                      Tahun: {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Input Tanggal Pencatatan Spesifik */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-400 shrink-0">Tgl Catat:</span>
+                <input
+                  type="date"
+                  value={targetDate}
+                  onChange={(e) => handleSelectExactDate(e.target.value)}
+                  className="flex-1 bg-slate-900 border border-slate-700 focus:border-sky-500 rounded-xl px-3 py-1.5 text-xs font-mono font-bold text-sky-300 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
@@ -1162,8 +1383,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                                       !item.isValid ? 'bg-rose-500/5' : ''
                                     }`}
                                   >
-                                    <td className="py-2 px-3 whitespace-nowrap text-slate-400 font-mono">
-                                      {item.date}
+                                    <td className="py-2 px-3 whitespace-nowrap">
+                                      <input
+                                        type="date"
+                                        value={item.date}
+                                        onChange={(e) => handleUpdateRowDate(idx, e.target.value)}
+                                        className="bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none"
+                                      />
                                     </td>
 
                                     <td className="py-2 px-3 whitespace-nowrap">

@@ -342,8 +342,9 @@ export function parseAmount(val: any): number {
 /**
  * Clean & parse date string to YYYY-MM-DD
  */
-export function parseDate(val: any): string {
-  if (!val) return getTodayWIB();
+export function parseDate(val: any, fallbackDate?: string): string {
+  const defaultDateStr = fallbackDate || getTodayWIB();
+  if (!val) return defaultDateStr;
 
   if (typeof val === 'number' && val > 30000 && val < 60000) {
     const excelEpoch = new Date(1899, 11, 30);
@@ -389,12 +390,13 @@ export function parseDate(val: any): string {
     return `${y}-${m}-${d}`;
   }
 
-  return getTodayWIB();
+  return defaultDateStr;
 }
 
 export interface ParseFreeformOptions {
   useDefaultTruck?: boolean;
   defaultTruckId?: string;
+  defaultDate?: string;
 }
 
 export interface ParseFreeformResult {
@@ -424,12 +426,14 @@ export function parseFreeformNotes(
   // Normalize options
   let useDefaultTruck = false;
   let defaultTruckId = '';
+  let customDefaultDate = '';
   if (typeof options === 'string') {
     defaultTruckId = options;
     useDefaultTruck = Boolean(options);
   } else if (options && typeof options === 'object') {
     useDefaultTruck = Boolean(options.useDefaultTruck);
     defaultTruckId = options.defaultTruckId || '';
+    customDefaultDate = options.defaultDate || '';
   }
 
   const defaultTruck =
@@ -446,7 +450,7 @@ export function parseFreeformNotes(
   let activeTruck: TruckUnit | null = null;
   let activeRawUnitCode: string | null = null;
   let activeNonDtCode: string | null = null;
-  const todayStr = getTodayWIB();
+  const todayStr = customDefaultDate || getTodayWIB();
 
   for (let idx = 0; idx < lines.length; idx++) {
     const line = lines[idx];
@@ -875,7 +879,7 @@ export function detectColumns(headerRow: any[]) {
 export function processRawRows(
   rows: any[][],
   trucks: TruckUnit[],
-  options?: { useDefaultTruck?: boolean; defaultTruckId?: string } | string
+  options?: { useDefaultTruck?: boolean; defaultTruckId?: string; defaultDate?: string } | string
 ): { items: ParsedExpenseItem[]; manualItems: ParsedExpenseItem[]; detectedHeaders: string[] } {
   if (!rows || rows.length === 0) {
     return { items: [], manualItems: [], detectedHeaders: [] };
@@ -884,12 +888,14 @@ export function processRawRows(
   // Normalize options
   let useDefaultTruck = false;
   let defaultTruckId = '';
+  let customDefaultDate = '';
   if (typeof options === 'string') {
     defaultTruckId = options;
     useDefaultTruck = Boolean(options);
   } else if (options && typeof options === 'object') {
     useDefaultTruck = Boolean(options.useDefaultTruck);
     defaultTruckId = options.defaultTruckId || '';
+    customDefaultDate = options.defaultDate || '';
   }
 
   const defaultTruck =
@@ -989,7 +995,7 @@ export function processRawRows(
       vendor = extractVendorFromText(rawDesc || category, category);
     }
 
-    const date = parseDate(rawDate);
+    const date = parseDate(rawDate, customDefaultDate || undefined);
     const rowText = row.filter(Boolean).join(' | ');
 
     // KONDISI 1: TOMBOL DT DEFAULT AKTIF (ON)
@@ -1101,7 +1107,7 @@ export function processRawRows(
 export function parsePastedExcelText(
   text: string,
   trucks: TruckUnit[],
-  options?: { useDefaultTruck?: boolean; defaultTruckId?: string } | string
+  options?: { useDefaultTruck?: boolean; defaultTruckId?: string; defaultDate?: string } | string
 ): { items: ParsedExpenseItem[]; manualItems: ParsedExpenseItem[]; detectedHeaders: string[] } {
   if (!text || !text.trim()) {
     return { items: [], manualItems: [], detectedHeaders: [] };
@@ -1149,7 +1155,7 @@ export function parsePastedExcelText(
 export async function parseExcelFile(
   file: File,
   trucks: TruckUnit[],
-  options?: { useDefaultTruck?: boolean; defaultTruckId?: string } | string
+  options?: { useDefaultTruck?: boolean; defaultTruckId?: string; defaultDate?: string } | string
 ): Promise<{ items: ParsedExpenseItem[]; manualItems: ParsedExpenseItem[]; detectedHeaders: string[]; sheetNames: string[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
