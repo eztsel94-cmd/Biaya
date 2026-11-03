@@ -44,10 +44,33 @@ import {
   Radio,
   Zap,
   Settings,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  LogIn,
 } from 'lucide-react';
+
+const WEB_AUTH_STORAGE_KEY = 'traksi_kpu_web_login_v1';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTabType>('daily_records');
+
+  // State Login Utama Web (User: TRAKSIKSR, Password: TRAKSI_001)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return (
+        sessionStorage.getItem(WEB_AUTH_STORAGE_KEY) === 'TRAKSIKSR' ||
+        localStorage.getItem(WEB_AUTH_STORAGE_KEY) === 'TRAKSIKSR'
+      );
+    } catch {
+      return false;
+    }
+  });
+  const [loginUsername, setLoginUsername] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   // Filter params passed when navigating to expenses
   const [expensesInitialTruck, setExpensesInitialTruck] = useState<string>('all');
@@ -339,9 +362,43 @@ export default function App() {
 
   // Helper untuk keluar dari portal pemuat (setelah verifikasi PIN Admin TRAKSI_001) menuju Beranda Utama
   const handleExitPemuatPortal = () => {
+    try {
+      sessionStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
+      localStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
+    } catch {}
+    setIsAuthenticated(true);
     safeUpdateBrowserUrl('/');
     setIsPemuatPortalMode(false);
     setActiveTab('daily_records');
+  };
+
+  const handleWebLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUser = loginUsername.trim().toUpperCase();
+    const cleanPass = loginPassword.trim().toUpperCase();
+
+    if (cleanUser === 'TRAKSIKSR' && cleanPass === 'TRAKSI_001') {
+      try {
+        sessionStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
+        localStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
+      } catch {}
+      setIsAuthenticated(true);
+      setLoginError(null);
+      setLoginPassword('');
+    } else {
+      setLoginError('User atau Password yang dimasukkan tidak sesuai.');
+    }
+  };
+
+  const handleWebLogout = () => {
+    try {
+      sessionStorage.removeItem(WEB_AUTH_STORAGE_KEY);
+      localStorage.removeItem(WEB_AUTH_STORAGE_KEY);
+    } catch {}
+    setIsAuthenticated(false);
+    setLoginUsername('');
+    setLoginPassword('');
+    setLoginError(null);
   };
 
   // Helper untuk membuka portal supir dan memperbarui URL tanpa reload
@@ -531,6 +588,112 @@ export default function App() {
     );
   }
 
+  // 3C. HALAMAN LOGIN WAJIB SEBELUM MASUK KE WEB UTAMA TRAKSI KPU
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 font-sans relative overflow-hidden">
+        {/* Background Glow */}
+        <div className="absolute -top-24 -left-24 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="w-full max-w-md bg-slate-900/95 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative z-10 backdrop-blur-md">
+          {/* Logo & Judul Sistem */}
+          <div className="flex flex-col items-center text-center space-y-3">
+            <div className="h-16 px-4 py-2 rounded-2xl bg-white flex items-center justify-center shadow-lg shadow-emerald-500/15 ring-2 ring-emerald-500/30">
+              <img
+                src="/assets/aistudio/images_70037338.jpeg"
+                alt="Logo Traksi KPU - Kalimantan Plantation Unit"
+                className="h-full w-auto object-contain"
+              />
+            </div>
+            <div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 mb-1.5">
+                <Lock className="w-3 h-3" />
+                <span>Akses Terkunci</span>
+              </span>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Sistem Traksi KPU
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Kalimantan Plantation Unit &bull; Silakan login menggunakan User &amp; Password untuk masuk ke sistem.
+              </p>
+            </div>
+          </div>
+
+          {/* Form Login */}
+          <form onSubmit={handleWebLoginSubmit} className="space-y-4">
+            {/* Input User */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-emerald-400" />
+                <span>User</span>
+              </label>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => {
+                  setLoginUsername(e.target.value);
+                  if (loginError) setLoginError(null);
+                }}
+                placeholder="Masukkan User"
+                autoComplete="username"
+                required
+                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700/90 text-white text-sm font-mono font-semibold focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+              />
+            </div>
+
+            {/* Input Password */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Password</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? 'text' : 'password'}
+                  value={loginPassword}
+                  onChange={(e) => {
+                    setLoginPassword(e.target.value);
+                    if (loginError) setLoginError(null);
+                  }}
+                  placeholder="Masukkan Password"
+                  autoComplete="current-password"
+                  required
+                  className="w-full px-4 py-3 pr-11 rounded-xl bg-slate-950 border border-slate-700/90 text-white text-sm font-mono font-semibold focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                  title={showLoginPassword ? 'Sembunyikan Password' : 'Tampilkan Password'}
+                >
+                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Error Alert */}
+            {loginError && (
+              <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm tracking-wide transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Masuk ke Sistem Traksi KPU</span>
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   // 4. STANDARD FLEET OVERVIEW / ADMIN PORTAL
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -582,6 +745,7 @@ export default function App() {
         onOpenAddExpense={() => handleOpenAddExpense()}
         onOpenExcelImport={() => handleOpenExcelImport()}
         onResetData={handleResetToDefault3Units}
+        onLogout={handleWebLogout}
       />
 
       {/* Main App Content */}
