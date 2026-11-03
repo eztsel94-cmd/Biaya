@@ -19,7 +19,12 @@ import { DriverPortalView } from './components/DriverPortalView';
 import { PemuatPortalView } from './components/PemuatPortalView';
 import { SettingsView } from './components/SettingsView';
 import { MonthlyReportView } from './components/MonthlyReportView';
-import { findTruckFromUrlQuery, extractDriverQueryFromLocation } from './utils/driverLink';
+import {
+  findTruckFromUrlQuery,
+  extractDriverQueryFromLocation,
+  extractPemuatPortalFromLocation,
+  getPemuatPortalUrl,
+} from './utils/driverLink';
 import {
   api,
   CLIENT_AUTHOR_ID,
@@ -51,9 +56,13 @@ export default function App() {
   const [driverPortalTruckId, setDriverPortalTruckId] = useState<string | null>(null);
   const [driverPortalQuery, setDriverPortalQuery] = useState<string | null>(() => extractDriverQueryFromLocation());
 
-  // Dedicated Pemuat Portal Mode (Akses Khusus Terisolasi untuk Pemuat)
-  const [isPemuatPortalMode, setIsPemuatPortalMode] = useState<boolean>(false);
-  const [pemuatPortalName, setPemuatPortalName] = useState<string>('');
+  // Dedicated Pemuat Portal Mode (Akses Khusus Terkunci & Hanya Lihat Hasil untuk Pemuat)
+  const [isPemuatPortalMode, setIsPemuatPortalMode] = useState<boolean>(
+    () => extractPemuatPortalFromLocation().isPemuat
+  );
+  const [pemuatPortalName, setPemuatPortalName] = useState<string>(
+    () => extractPemuatPortalFromLocation().pemuatName
+  );
 
   // Modal states
   const [isDataManagerOpen, setIsDataManagerOpen] = useState<boolean>(false);
@@ -128,30 +137,11 @@ export default function App() {
   useEffect(() => {
     const checkUrlForPortals = () => {
       try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
-        const hashParams = hash ? new URLSearchParams(hash) : null;
-
         // A. Cek Akses Khusus Portal Pemuat (?portal=pemuat atau ?pemuat=... atau #pemuat)
-        const portalParam = urlParams.get('portal') || hashParams?.get('portal');
-        const modeParam = urlParams.get('mode') || hashParams?.get('mode');
-        const pemuatParam = urlParams.get('pemuat') || hashParams?.get('pemuat');
-        const namaParam = urlParams.get('nama') || hashParams?.get('nama');
-        const isPemuatHash = hash.toLowerCase().includes('pemuat');
-
-        if (
-          portalParam === 'pemuat' ||
-          modeParam === 'pemuat' ||
-          pemuatParam !== null ||
-          isPemuatHash
-        ) {
-          setActiveTab('pemuat_portal');
-          const targetName =
-            namaParam ||
-            (pemuatParam && pemuatParam !== 'true' && pemuatParam !== '1' ? pemuatParam : '');
-          if (targetName) {
-            setPemuatPortalName(targetName.trim());
-          }
+        const pemuatInfo = extractPemuatPortalFromLocation();
+        if (pemuatInfo.isPemuat) {
+          setIsPemuatPortalMode(true);
+          setPemuatPortalName(pemuatInfo.pemuatName);
           return;
         }
 
@@ -289,6 +279,26 @@ export default function App() {
     }
   };
 
+  const handleAddSystemUser = async (newUser: Omit<AppUser, 'id'>) => {
+    try {
+      const users = await api.addSystemUser(newUser);
+      setAvailableUsers(users);
+      notify(`Akun ${newUser.name} berhasil ditambahkan.`);
+    } catch (err: any) {
+      notify(err.message || 'Gagal menambah akun');
+    }
+  };
+
+  const handleDeleteSystemUser = async (userId: string) => {
+    try {
+      const users = await api.deleteSystemUser(userId);
+      setAvailableUsers(users);
+      notify('Akun berhasil dihapus dari daftar hak akses.');
+    } catch (err: any) {
+      notify(err.message || 'Gagal menghapus akun');
+    }
+  };
+
   // Navigation helpers
   const handleNavigateToExpensesWithCategory = (category?: string) => {
     setExpensesInitialCategory(category || 'all');
@@ -311,6 +321,27 @@ export default function App() {
   const handleOpenExcelImport = (defaultTruckId?: string) => {
     setExcelImportDefaultTruckId(defaultTruckId);
     setIsExcelImportOpen(true);
+  };
+
+  // Helper untuk membuka portal pemuat terkunci dan memperbarui URL tanpa reload
+  const handleEnterPemuatPortal = (pemuatName?: string) => {
+    const cleanName = (pemuatName || '').trim();
+    setPemuatPortalName(cleanName);
+    setIsPemuatPortalMode(true);
+    if (typeof window !== 'undefined' && window.history.pushState) {
+      const targetUrl = getPemuatPortalUrl(cleanName || undefined);
+      window.history.pushState({ path: targetUrl }, '', targetUrl);
+    }
+  };
+
+  // Helper untuk keluar dari portal pemuat (setelah verifikasi PIN Admin TRAKSI_001) menuju Beranda Utama
+  const handleExitPemuatPortal = () => {
+    if (typeof window !== 'undefined' && window.history.pushState) {
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.pushState({ path: cleanUrl }, '', cleanUrl);
+    }
+    setIsPemuatPortalMode(false);
+    setActiveTab('daily_records');
   };
 
   // Helper untuk membuka portal supir dan memperbarui URL tanpa reload
@@ -341,13 +372,107 @@ export default function App() {
     return null;
   }, [trucks, driverPortalTruckId, driverPortalQuery]);
 
-  // Jika URL memiliki parameter supir (?dt=...) tetapi data truk masih dimuat dari Firestore:
-  if (driverPortalQuery && !activeDriverTruck && trucks.length === 0) {
+  const [unmatchedPinPrompt, setUnmatchedPinPrompt] = useState(false);
+  const [unmatchedPinInput, setUnmatchedPinInput] = useState('');
+  const [unmatchedPinError, setUnmatchedPinError] = useState(false);
+
+  // Jika URL memiliki parameter supir (?dt=...) tetapi unit belum cocok / sedang dimuat dari Firestore,
+  // JANGAN PERNAH beralih otomatis ke Beranda Admin! Tetap kunci di layar Portal Supir.
+  if (driverPortalQuery && !activeDriverTruck) {
+    if (trucks.length === 0) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+          <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <h2 className="text-white font-bold text-lg">Membuka Portal Supir...</h2>
+          <p className="text-slate-400 text-xs mt-1">Menghubungkan unit armada Dump Truck ke cloud Firestore...</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <h2 className="text-white font-bold text-lg">Membuka Portal Supir...</h2>
-        <p className="text-slate-400 text-xs mt-1">Menghubungkan unit armada Dump Truck ke cloud Firestore...</p>
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+            <Truck className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">Portal Khusus Supir — Traksi KPU</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Kode unit <span className="text-emerald-400 font-mono font-bold">{driverPortalQuery}</span> belum dipilih. Silakan pilih unit kendaraan Anda di bawah ini:
+            </p>
+          </div>
+          <div className="max-h-60 overflow-y-auto grid grid-cols-2 gap-2 text-left pt-1">
+            {trucks.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => handleEnterDriverPortal(t.id)}
+                className="p-2.5 rounded-xl bg-slate-950 hover:bg-emerald-950/50 border border-slate-800 hover:border-emerald-500/40 transition flex flex-col"
+              >
+                <span className="text-xs font-black text-white font-mono">{t.code}</span>
+                <span className="text-[11px] text-slate-400 truncate">{t.driverName}</span>
+              </button>
+            ))}
+          </div>
+
+          {!unmatchedPinPrompt ? (
+            <div className="pt-3 border-t border-slate-800 flex justify-center">
+              <button
+                onClick={() => {
+                  setUnmatchedPinPrompt(true);
+                  setUnmatchedPinInput('');
+                  setUnmatchedPinError(false);
+                }}
+                className="text-xs text-slate-400 hover:text-slate-200 underline"
+              >
+                Buka Beranda Admin (Perlu PIN)
+              </button>
+            </div>
+          ) : (
+            <div className="pt-3 border-t border-slate-800 space-y-2 text-left">
+              <label className="block text-[11px] font-bold text-slate-400 uppercase">Masukkan PIN Admin</label>
+              <input
+                type="password"
+                value={unmatchedPinInput}
+                onChange={(e) => {
+                  setUnmatchedPinInput(e.target.value);
+                  setUnmatchedPinError(false);
+                }}
+                placeholder="PIN Admin"
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-center font-mono text-sm focus:outline-none focus:border-emerald-500"
+              />
+              {unmatchedPinError && (
+                <p className="text-[11px] text-rose-400 text-center">PIN Admin tidak sesuai.</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setUnmatchedPinPrompt(false)}
+                  className="flex-1 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={() => {
+                    if (unmatchedPinInput.trim().toUpperCase() === 'TRAKSI_001') {
+                      if (typeof window !== 'undefined' && window.history.pushState) {
+                        const cleanUrl = window.location.origin + window.location.pathname;
+                        window.history.pushState({ path: cleanUrl }, '', cleanUrl);
+                      }
+                      setDriverPortalTruckId(null);
+                      setDriverPortalQuery(null);
+                      setUnmatchedPinPrompt(false);
+                      setActiveTab('daily_records');
+                    } else {
+                      setUnmatchedPinError(true);
+                    }
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold"
+                >
+                  Buka Beranda
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -390,6 +515,7 @@ export default function App() {
             }
             setDriverPortalTruckId(null);
             setDriverPortalQuery(null);
+            setActiveTab('daily_records');
           }}
         />
 
@@ -402,6 +528,17 @@ export default function App() {
           onAddExpense={handleAddExpense}
         />
       </>
+    );
+  }
+
+  // 3B. IF IN DEDICATED PEMUAT PORTAL MODE (TERKUNCI & HANYA LIHAT HASIL):
+  if (isPemuatPortalMode || activeTab === 'pemuat_portal') {
+    return (
+      <PemuatPortalView
+        trucks={trucks}
+        initialPemuatName={pemuatPortalName}
+        onExitToAdmin={handleExitPemuatPortal}
+      />
     );
   }
 
@@ -439,7 +576,14 @@ export default function App() {
       {/* Main Navbar with Realtime indicator & User Role */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={(tab) => {
+          if (tab === 'pemuat_portal') {
+            handleEnterPemuatPortal(pemuatPortalName);
+          } else {
+            setIsPemuatPortalMode(false);
+            setActiveTab(tab);
+          }
+        }}
         truckCount={trucks.length}
         expenseCount={expenses.length}
         isRealtimeConnected={isRealtimeConnected}
@@ -510,16 +654,8 @@ service cloud.firestore {
           <DailyRecordsView
             trucks={trucks}
             onOpenPemuatPortal={(pemuatName) => {
-              if (pemuatName) setPemuatPortalName(pemuatName);
-              setActiveTab('pemuat_portal');
+              handleEnterPemuatPortal(pemuatName);
             }}
-          />
-        )}
-
-        {activeTab === 'pemuat_portal' && (
-          <PemuatPortalView
-            trucks={trucks}
-            initialPemuatName={pemuatPortalName}
           />
         )}
 
@@ -622,6 +758,8 @@ service cloud.firestore {
           notify(`Beralih ke akun ${user.name} [Role: ${user.roleLabel}]`);
         }}
         onUpdateRole={handleUpdateUserRole}
+        onAddUser={handleAddSystemUser}
+        onDeleteUser={handleDeleteSystemUser}
       />
 
       <DataManagerModal

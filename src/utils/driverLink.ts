@@ -197,6 +197,49 @@ export function extractDriverQueryFromLocation(): string | null {
 }
 
 /**
+ * Extracts Pemuat Portal mode and optional target pemuat name from current browser URL.
+ */
+export function extractPemuatPortalFromLocation(): { isPemuat: boolean; pemuatName: string } {
+  if (typeof window === 'undefined') {
+    return { isPemuat: false, pemuatName: '' };
+  }
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
+    const hashParams = hash ? new URLSearchParams(hash) : null;
+
+    const portalParam = (urlParams.get('portal') || hashParams?.get('portal') || '').toLowerCase();
+    const modeParam = (urlParams.get('mode') || hashParams?.get('mode') || '').toLowerCase();
+    const pemuatParam = urlParams.get('pemuat') ?? hashParams?.get('pemuat') ?? null;
+    const namaParam = urlParams.get('nama') || hashParams?.get('nama') || '';
+    const isPemuatHash = hash.toLowerCase().includes('pemuat');
+
+    if (
+      portalParam === 'pemuat' ||
+      modeParam === 'pemuat' ||
+      pemuatParam !== null ||
+      isPemuatHash
+    ) {
+      const rawName =
+        namaParam ||
+        (pemuatParam && pemuatParam !== 'true' && pemuatParam !== '1' ? pemuatParam : '');
+      let decodedName = rawName.trim();
+      try {
+        decodedName = decodeURIComponent(decodedName.replace(/\+/g, ' ')).trim();
+      } catch {
+        // ignore decode error
+      }
+      return { isPemuat: true, pemuatName: decodedName };
+    }
+  } catch (err) {
+    console.warn('Failed to extract pemuat portal from location:', err);
+  }
+
+  return { isPemuat: false, pemuatName: '' };
+}
+
+/**
  * Builds the direct, dedicated link for a Loader / Pemuat to access the isolated daily records portal.
  * Uses query parameter `portal=pemuat` (and optional `nama=...`).
  */
@@ -226,8 +269,8 @@ export function getWhatsAppSharePemuatUrl(options?: {
   const url = options?.directUrl || getPemuatPortalUrl(pemuatName);
   const phone = formatPhoneNumberForWhatsApp(options?.phone);
 
-  const greeting = pemuatName ? `Halo Pak *${pemuatName}*,` : 'Halo Rekan Pemuat TBS Kebun,';
-  const message = `${greeting}\n\nBerikut *Link Khusus Riwayat & Input Catatan Harian Truk TBS* untuk akses di lapangan:\n\n👉 ${url}\n\n📱 *Keunggulan Link Khusus Pemuat:*\n• Langsung terbuka di HP tanpa perlu login/password rumit\n• Terisolasi khusus untuk catatan rit & tonase TBS harian\n• Data tersambung langsung secara real-time ke sistem Firebase traksi\n\n_Silakan simpan link ini di WhatsApp Anda atau pasang bookmark di layar HP._`;
+  const greeting = pemuatName ? `Halo *${pemuatName}*,` : 'Halo Rekan Pemuat TBS Traksi KPU,';
+  const message = `${greeting}\n\nBerikut *Link Portal Hasil Muat TBS Traksi KPU* untuk melihat hasil ritase & tonase muatan harian/bulanan Anda:\n\n👉 ${url}\n\n📱 *Informasi Portal Pemuat:*\n• Tampilan khusus pemuat (mudah melihat hasil tonase & urutan rit per afdeling)\n• Mode terkunci & aman (data tidak dapat diubah sembarangan)\n• Data terhubung langsung secara real-time\n\n_Silakan simpan link ini di WhatsApp atau tambahkan ke Layar Utama HP Anda._`;
 
   const encodedMessage = encodeURIComponent(message);
   if (phone) {

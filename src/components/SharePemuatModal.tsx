@@ -25,7 +25,7 @@ interface SharePemuatModalProps {
 export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
   isOpen,
   onClose,
-  existingPemuatNames = ['Anton', 'Bambang', 'Suryanto', 'Rahmad'],
+  existingPemuatNames = [],
   onOpenPreview,
 }) => {
   const [selectedPemuat, setSelectedPemuat] = useState<string>('');
@@ -96,10 +96,10 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
             <Shield className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="text-xs space-y-1">
               <p className="font-semibold text-emerald-300">
-                100% Terisolasi & Aman untuk Pekerja Lapangan
+                100% Terkunci &amp; Aman (Hanya Lihat Hasil Muat)
               </p>
               <p className="text-slate-300 leading-relaxed">
-                Pemuat yang membuka link ini <strong>hanya dapat mengakses</strong> form input pengiriman TBS dan tabel riwayat ritase harian. Menu <em>Dashboard Biaya</em>, <em>Armada</em>, <em>Biaya Unit</em>, dan <em>Data Manager</em> <strong>tidak akan ditampilkan</strong> sama sekali.
+                Pemuat yang membuka link ini <strong>hanya dapat melihat hasil tonase, ritase, dan urutan rit per afdeling</strong>. Fitur edit/hapus dikunci sepenuhnya dan pemuat tidak dapat beralih ke Beranda Admin tanpa PIN Admin.
               </p>
             </div>
           </div>
@@ -128,7 +128,7 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
               >
                 Semua Pemuat
               </button>
-              {existingPemuatNames.slice(0, 3).map((name) => (
+              {existingPemuatNames.slice(0, 7).map((name) => (
                 <button
                   key={name}
                   type="button"
@@ -148,7 +148,7 @@ export const SharePemuatModal: React.FC<SharePemuatModalProps> = ({
               type="text"
               value={selectedPemuat}
               onChange={(e) => setSelectedPemuat(e.target.value)}
-              placeholder="Atau ketik nama pemuat spesifik (contoh: Anton)..."
+              placeholder="Atau ketik nama pemuat spesifik..."
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
             />
           </div>

@@ -1905,13 +1905,20 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       <SharePemuatModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        existingPemuatNames={Array.from(new Set(records.map((r) => r.driverName).filter(Boolean)))}
+        existingPemuatNames={Array.from(
+          new Set([
+            ...pemuatMaster.map((p) => p.name.trim().toUpperCase()),
+            ...records.flatMap((r) =>
+              (r.driverName || '')
+                .split('/')
+                .map((n) => n.trim().toUpperCase())
+                .filter(Boolean)
+            ),
+          ])
+        ).filter(Boolean)}
         onOpenPreview={(name) => {
           if (onOpenPemuatPortal) {
             onOpenPemuatPortal(name);
-          } else {
-            const url = getPemuatPortalUrl(name);
-            window.open(url, '_blank');
           }
         }}
       />

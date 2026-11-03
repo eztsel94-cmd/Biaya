@@ -60,9 +60,14 @@ export const Navbar: React.FC<NavbarProps> = ({
       <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-sm">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
-            {/* Logo & Company Name */}
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="h-9 sm:h-11 px-2 py-1 rounded-xl bg-white flex items-center justify-center shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-400/40 shrink-0 overflow-hidden">
+            {/* Logo & Company Name (Klik menuju Beranda Utama: Sistem Catatan Harian Truk TBS) */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('daily_records')}
+              title="Beranda Utama — Sistem Catatan Harian Truk TBS"
+              className="flex items-center gap-2.5 sm:gap-3 min-w-0 text-left focus:outline-none group"
+            >
+              <div className="h-9 sm:h-11 px-2 py-1 rounded-xl bg-white flex items-center justify-center shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-400/40 shrink-0 overflow-hidden group-hover:ring-emerald-400 transition">
                 <img
                   src="/assets/aistudio/images_70037338.jpeg"
                   alt="Logo Traksi KPU - Kalimantan Plantation Unit"
@@ -71,11 +76,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <span className="font-black text-sm sm:text-base lg:text-lg tracking-tight text-white truncate">
+                  <span className="font-black text-sm sm:text-base lg:text-lg tracking-tight text-white group-hover:text-emerald-300 transition truncate">
                     Traksi KPU
                   </span>
                   <span className="hidden sm:inline font-bold text-sm text-slate-300">
-                    · Operasional TBS
+                    · Catatan Harian Truk TBS
                   </span>
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 rounded border border-emerald-500/30 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -83,10 +88,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 hidden lg:block truncate">
-                  Kalimantan Plantation Unit — Ritase, Tonase, Supir &amp; Biaya Armada TBS
+                  Beranda Utama: Sistem Catatan Harian Truk TBS — Kalimantan Plantation Unit
                 </p>
               </div>
-            </div>
+            </button>
 
             {/* Desktop Navigation Links (Hidden on Mobile) */}
             <nav className="hidden md:flex items-center gap-1 lg:gap-2">

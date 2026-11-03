@@ -19,60 +19,59 @@ import {
 // Identifier untuk sesi pengguna saat ini
 export const CLIENT_AUTHOR_ID = `usr-${Math.random().toString(36).substring(2, 8)}`;
 
-// Daftar pengguna sistem dengan Hak Akses (RBAC)
+// Daftar pengguna sistem dengan Hak Akses (RBAC) — bersih tanpa data contoh bawaan
 export const DEFAULT_SYSTEM_USERS: AppUser[] = [
   {
     id: 'usr-admin-1',
-    name: 'Wahyu Maulana (Admin Operasional)',
+    name: 'Admin Traksi KPU',
     email: 'eztsel94@gmail.com',
     role: 'admin',
-    roleLabel: 'Admin / Kasir Kebun',
-    department: 'Traksi KPU - Divisi Logistik & Keuangan TBS',
-  },
-  {
-    id: 'usr-admin-2',
-    name: 'Muhammad Rizki Aditya (Admin Operasional)',
-    email: 'rizki.aditya@traksikpu.com',
-    role: 'admin',
-    roleLabel: 'Admin / Kasir Kebun',
-    department: 'Traksi KPU - Divisi Logistik & Keuangan TBS',
-  },
-  {
-    id: 'usr-driver-truck-1',
-    name: 'Budi Santoso (Supir Unit 01)',
-    email: 'budi.santoso@traksikpu.com',
-    role: 'operator',
-    roleLabel: 'Supir DT (Unit 01)',
-    department: 'Armada Truk TBS - Traksi KPU',
-  },
-  {
-    id: 'usr-driver-truck-2',
-    name: 'Agus Supriyadi (Supir Unit 90)',
-    email: 'agus.supriyadi@traksikpu.com',
-    role: 'operator',
-    roleLabel: 'Supir DT (Unit 90)',
-    department: 'Armada Truk TBS - Traksi KPU',
-  },
-  {
-    id: 'usr-driver-truck-3',
-    name: 'Hendra Wijaya (Supir Unit 03)',
-    email: 'hendra.wijaya@traksikpu.com',
-    role: 'operator',
-    roleLabel: 'Supir DT (Unit 03)',
-    department: 'Armada Truk TBS - Traksi KPU',
-  },
-  {
-    id: 'usr-viewer-1',
-    name: 'Dedi Kurniawan (Manajer Lapangan)',
-    email: 'dedi.kurniawan@traksikpu.com',
-    role: 'viewer',
-    roleLabel: 'Viewer / Pengawas Lapangan',
-    department: 'Pengawasan Lapangan TBS - Traksi KPU',
+    roleLabel: 'Admin Utama',
+    department: 'Traksi KPU - Kalimantan Plantation Unit',
   },
 ];
 
-let currentUser: AppUser = DEFAULT_SYSTEM_USERS[0];
-let currentUsersList: AppUser[] = [...DEFAULT_SYSTEM_USERS];
+const USERS_STORAGE_KEY = 'traksi_kpu_rbac_users_v1';
+
+const DUMMY_USER_IDS = new Set([
+  'usr-admin-2',
+  'usr-driver-truck-1',
+  'usr-driver-truck-2',
+  'usr-driver-truck-3',
+  'usr-operator-1',
+  'usr-viewer-1',
+]);
+
+function loadSavedUsers(): AppUser[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = window.localStorage.getItem(USERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.filter((u: AppUser) => !DUMMY_USER_IDS.has(u.id));
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return [...DEFAULT_SYSTEM_USERS];
+}
+
+function saveUsersToStorage(users: AppUser[]) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+let currentUsersList: AppUser[] = loadSavedUsers();
+let currentUser: AppUser = currentUsersList[0] || DEFAULT_SYSTEM_USERS[0];
 
 export function setCurrentUser(user: AppUser) {
   currentUser = user;
@@ -92,7 +91,7 @@ export function getInitialExpenses(): ExpenseRecord[] {
 }
 
 export function getInitialUsers(): AppUser[] {
-  return DEFAULT_SYSTEM_USERS;
+  return currentUsersList;
 }
 
 export type RealtimeEventData = {
@@ -179,14 +178,35 @@ export const api = {
         return {
           ...u,
           role: newRole,
-          roleLabel: newRole === 'admin' ? 'Admin / Kasir Kebun' : newRole === 'operator' ? 'Operator Supir' : 'Viewer / Pengawas Lapangan',
+          roleLabel: newRole === 'admin' ? 'Admin / Kasir Kebun' : newRole === 'operator' ? 'Operator / Supir DT' : 'Viewer / Pengawas Lapangan',
         };
       }
       return u;
     });
     currentUsersList = updated;
+    saveUsersToStorage(currentUsersList);
     const target = updated.find((u) => u.id === userId) || updated[0];
     return { user: target, users: updated };
+  },
+
+  async addSystemUser(newUser: Omit<AppUser, 'id'>): Promise<AppUser[]> {
+    const created: AppUser = {
+      ...newUser,
+      id: `usr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    };
+    currentUsersList = [...currentUsersList, created];
+    saveUsersToStorage(currentUsersList);
+    return currentUsersList;
+  },
+
+  async deleteSystemUser(userId: string): Promise<AppUser[]> {
+    if (userId === 'usr-admin-1') return currentUsersList;
+    currentUsersList = currentUsersList.filter((u) => u.id !== userId);
+    if (currentUsersList.length === 0) {
+      currentUsersList = [...DEFAULT_SYSTEM_USERS];
+    }
+    saveUsersToStorage(currentUsersList);
+    return currentUsersList;
   },
 
   // Operasi Armada Truk -> Firestore

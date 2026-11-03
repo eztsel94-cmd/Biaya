@@ -199,13 +199,13 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
 
   const handleVerifyPinAndExit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput.trim() === '1234') {
+    if (pinInput.trim().toUpperCase() === 'TRAKSI_001') {
       setShowPinModal(false);
       setPinInput('');
       setPinError('');
       onExitDriverMode();
     } else {
-      setPinError('PIN Admin salah! Masukkan PIN yang benar (Default: 1234)');
+      setPinError('PIN Admin salah! Akses ditolak.');
     }
   };
 
@@ -718,19 +718,19 @@ export const DriverPortalView: React.FC<DriverPortalViewProps> = ({
             <form onSubmit={handleVerifyPinAndExit} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  PIN Admin (Default: 1234)
+                  PIN Admin
                 </label>
                 <input
                   type="password"
-                  maxLength={6}
+                  maxLength={32}
                   value={pinInput}
                   onChange={(e) => {
                     setPinInput(e.target.value);
                     setPinError('');
                   }}
                   autoFocus
-                  placeholder="••••"
-                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-center text-white tracking-widest text-lg font-mono focus:border-emerald-500 outline-none"
+                  placeholder="Masukkan PIN Admin"
+                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-center text-white tracking-widest text-base font-mono focus:border-emerald-500 outline-none"
                 />
                 {pinError && (
                   <p className="text-xs text-rose-400 font-medium mt-1 flex items-center gap-1">

@@ -5,53 +5,36 @@ import {
   Calendar,
   User,
   MapPin,
-  Plus,
-  Trash2,
-  Edit2,
   Search,
-  Filter,
   CheckCircle2,
   AlertTriangle,
-  RefreshCw,
   Clock,
   Check,
-  ChevronDown,
   X,
-  Share2,
   Copy,
-  Smartphone,
-  ShieldCheck,
+  ShieldAlert,
   TrendingUp,
-  ArrowLeft,
   FileSpreadsheet,
-  Download,
   ChevronLeft,
   ChevronRight,
   CalendarDays,
   Table,
-  Eye,
   Sparkles,
   RotateCcw,
+  Lock,
+  KeyRound,
+  AlertCircle,
+  MessageCircle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { DailyRecord, NewDailyRecord } from '../types/dailyRecord';
+import { DailyRecord } from '../types/dailyRecord';
 import { TruckUnit } from '../types/truck';
 import {
   subscribeToDailyRecords,
-  addDailyRecord,
-  updateDailyRecord,
-  deleteDailyRecord,
-  deleteAllDailyRecords,
   subscribeToFirestorePemuat,
-  addPemuatFirestore,
-  deletePemuatFirestore,
 } from '../services/firebase';
-import { PemuatManagerModal } from './PemuatManagerModal';
 import { getPemuatPortalUrl, getWhatsAppSharePemuatUrl } from '../utils/driverLink';
 import { getTodayWIB, getWIBDateParts, getDaysAgoWIB } from '../utils/formatters';
-
-const QUICK_TRUCKS: string[] = [];
-const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
 
 export const INDO_MONTHS = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -78,26 +61,16 @@ interface PemuatPortalViewProps {
 
 export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   trucks = [],
-  initialPemuatName,
+  initialPemuatName = '',
   onExitToAdmin,
 }) => {
   const [records, setRecords] = useState<DailyRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
-  // Dynamic Truck codes dari data armada yang terdaftar
-  const dynamicTruckCodes = useMemo(() => {
-    if (trucks && trucks.length > 0) {
-      return trucks.map((t) => t.code);
-    }
-    return QUICK_TRUCKS;
-  }, [trucks]);
 
   // Master Nama Pemuat dari Firestore
   const [pemuatMaster, setPemuatMaster] = useState<Array<{ id: string; name: string }>>([]);
-  const [isPemuatManagerOpen, setIsPemuatManagerOpen] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToFirestorePemuat((list) => {
@@ -106,32 +79,39 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     return () => unsub();
   }, []);
 
-  // Active Pemuat profile
-  const [activePemuat, setActivePemuat] = useState<string>(initialPemuatName || 'Anton');
+  // Pilihan Nama Pemuat ('' = Semua Pemuat)
+  const [selectedPemuat, setSelectedPemuat] = useState<string>(() => (initialPemuatName || '').trim());
 
-  // Mode Tampilan: Kalender Bulanan Interaktif vs Tabel Riwayat
+  useEffect(() => {
+    if (initialPemuatName !== undefined) {
+      setSelectedPemuat(initialPemuatName.trim());
+    }
+  }, [initialPemuatName]);
+
+  // Mode Tampilan: Kalender Bulanan Interaktif vs Daftar Riwayat
   const [viewMode, setViewMode] = useState<'calendar' | 'table'>('calendar');
 
   // State Tanggal Hari Ini & Navigasi Kalender sesuai Waktu Indonesia Barat (WIB / UTC+7)
   const [todayStr, setTodayStr] = useState<string>(() => getTodayWIB());
   const [calendarYear, setCalendarYear] = useState<number>(() => getWIBDateParts().year);
-  const [calendarMonth, setCalendarMonth] = useState<number>(() => getWIBDateParts().monthIndex); // 0 = Jan, 11 = Des
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => getWIBDateParts().monthIndex);
 
   // State Modal Detail per Tanggal & Pencarian Rincian
   const [selectedDateForDetail, setSelectedDateForDetail] = useState<string | null>(null);
   const [modalSearchQuery, setModalSearchQuery] = useState<string>('');
 
-  // Form State Input Baru
-  const [formData, setFormData] = useState<NewDailyRecord>(() => ({
-    date: getTodayWIB(),
-    truckNumber: trucks.length > 0 ? trucks[0].code : '',
-    driverName: initialPemuatName || '',
-    tonnage: '' as any,
-    afdeling: 'Afdeling 1',
-    notes: '',
-  }));
+  // Filter & Search State untuk Daftar Riwayat
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterTruck, setFilterTruck] = useState<string>('ALL');
+  const [filterDateRange, setFilterDateRange] = useState<'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH'>('THIS_MONTH');
 
-  // Sinkronisasi otomatis tanggal WIB secara real-time (walaupun tidak ada pengangkutan / halaman dibiarkan terbuka)
+  // Share & PIN Admin Modal State
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [showPinModal, setShowPinModal] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<string>('');
+
+  // Sinkronisasi otomatis tanggal WIB secara real-time
   useEffect(() => {
     const syncWIBDate = () => {
       const wib = getWIBDateParts();
@@ -139,10 +119,6 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         if (prevToday !== wib.dateStr) {
           setCalendarYear(wib.year);
           setCalendarMonth(wib.monthIndex);
-          setFormData((prevForm) => ({
-            ...prevForm,
-            date: prevForm.date === prevToday ? wib.dateStr : prevForm.date,
-          }));
           return wib.dateStr;
         }
         return prevToday;
@@ -166,156 +142,15 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     };
   }, []);
 
-  // Sinkronkan pilihan awal Nomor Unit Truk dengan Armada yang terdata
-  useEffect(() => {
-    if (dynamicTruckCodes.length > 0) {
-      setFormData((prev) => {
-        if (!prev.truckNumber || (!dynamicTruckCodes.includes(prev.truckNumber) && prev.truckNumber === 'DT 90')) {
-          return { ...prev, truckNumber: dynamicTruckCodes[0] };
-        }
-        return prev;
-      });
-    }
-  }, [dynamicTruckCodes]);
-
-  // Filter & Search State
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [filterMode, setFilterMode] = useState<'MY_RECORDS' | 'ALL'>('ALL');
-  const [filterAfdeling, setFilterAfdeling] = useState<string>('ALL');
-  const [filterTruck, setFilterTruck] = useState<string>('ALL');
-  const [filterDateRange, setFilterDateRange] = useState<'ALL' | 'TODAY' | '7DAYS' | 'THIS_MONTH'>('TODAY');
-
-  // Edit modal state
-  const [recordToEdit, setRecordToEdit] = useState<DailyRecord | null>(null);
-  const [editFormData, setEditFormData] = useState<DailyRecord | null>(null);
-  const [isUpdating, setIsUpdating] = useState<boolean>(false);
-
-  // Delete modal state
-  const [recordToDelete, setRecordToDelete] = useState<DailyRecord | null>(null);
-  const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState<boolean>(false);
-  const [isDeletingAll, setIsDeletingAll] = useState<boolean>(false);
-
-  // Helper format angka tonase otomatis (contoh tekan 6, 7, 9 -> 6,79)
-  const formatTonDigits = (digits: string): string => {
-    const clean = digits.replace(/\D/g, '').slice(0, 3);
-    if (!clean) return '';
-    if (clean.length === 1) return clean;
-    return `${clean[0]},${clean.slice(1)}`;
-  };
-
-  const handleTonDigitPress = (digit: string, isEdit = false) => {
-    if (isEdit) {
-      if (!editFormData) return;
-      const currentDigits = String(editFormData.tonnage ?? '').replace(/\D/g, '');
-      const nextDigits = currentDigits.length >= 3 ? digit : currentDigits + digit;
-      setEditFormData({ ...editFormData, tonnage: formatTonDigits(nextDigits) as any });
-    } else {
-      const currentDigits = String(formData.tonnage ?? '').replace(/\D/g, '');
-      const nextDigits = currentDigits.length >= 3 ? digit : currentDigits + digit;
-      setFormData((prev) => ({ ...prev, tonnage: formatTonDigits(nextDigits) as any }));
-    }
-  };
-
-  const handleTonBackspace = (isEdit = false) => {
-    if (isEdit) {
-      if (!editFormData) return;
-      const currentDigits = String(editFormData.tonnage ?? '').replace(/\D/g, '');
-      const nextDigits = currentDigits.slice(0, -1);
-      setEditFormData({ ...editFormData, tonnage: formatTonDigits(nextDigits) as any });
-    } else {
-      const currentDigits = String(formData.tonnage ?? '').replace(/\D/g, '');
-      const nextDigits = currentDigits.slice(0, -1);
-      setFormData((prev) => ({ ...prev, tonnage: formatTonDigits(nextDigits) as any }));
-    }
-  };
-
-  const handleTonInputChange = (rawVal: string, isEdit = false) => {
-    let formatted = rawVal;
-    if (/^\d{2,3}$/.test(rawVal)) {
-      formatted = `${rawVal[0]},${rawVal.slice(1)}`;
-    }
-    if (isEdit) {
-      if (!editFormData) return;
-      setEditFormData({ ...editFormData, tonnage: formatted as any });
-    } else {
-      setFormData((prev) => ({ ...prev, tonnage: formatted as any }));
-    }
-  };
-
-  // Share state
-  const [isCopied, setIsCopied] = useState<boolean>(false);
-
-  // Multi-select Pemuat di Form Input Baru (format: NAMA1/NAMA2/NAMA3)
-  const selectedPemuatList = useMemo(() => {
-    if (!formData.driverName) return [];
-    return formData.driverName
-      .split('/')
-      .map((n) => n.trim().toUpperCase())
-      .filter(Boolean);
-  }, [formData.driverName]);
-
-  const handleTogglePemuatName = (name: string) => {
-    const upperName = name.trim().toUpperCase();
-    let currentNames = [...selectedPemuatList];
-    if (currentNames.includes(upperName)) {
-      currentNames = currentNames.filter((n) => n !== upperName);
-    } else {
-      currentNames.push(upperName);
-    }
-    const combined = currentNames.join('/');
-    setFormData((prev) => ({ ...prev, driverName: combined }));
-  };
-
-  // Multi-select Pemuat di Form Edit
-  const selectedEditPemuatList = useMemo(() => {
-    if (!editFormData || !editFormData.driverName) return [];
-    return editFormData.driverName
-      .split('/')
-      .map((n) => n.trim().toUpperCase())
-      .filter(Boolean);
-  }, [editFormData?.driverName]);
-
-  const handleToggleEditPemuatName = (name: string) => {
-    const upperName = name.trim().toUpperCase();
-    let currentNames = [...selectedEditPemuatList];
-    if (currentNames.includes(upperName)) {
-      currentNames = currentNames.filter((n) => n !== upperName);
-    } else {
-      currentNames.push(upperName);
-    }
-    setEditFormData((prev) => (prev ? { ...prev, driverName: currentNames.join('/') } : prev));
-  };
-
-  // Hitung nomor ritase otomatis khusus afdeling & tanggal yang dipilih
-  const afdelingRitsOnDate = useMemo(() => {
-    const selectedDate = formData.date || todayStr;
-    const selectedAfd = formData.afdeling || 'Afdeling 1';
-    return records.filter((r) => r.date === selectedDate && r.afdeling === selectedAfd);
-  }, [records, formData.date, formData.afdeling, todayStr]);
-
-  const nextRitNumber = useMemo(() => {
-    if (afdelingRitsOnDate.length === 0) return 1;
-    const maxRit = afdelingRitsOnDate.reduce((max, r) => Math.max(max, r.ritNumber || 0), 0);
-    return Math.max(maxRit, afdelingRitsOnDate.length) + 1;
-  }, [afdelingRitsOnDate]);
-
   // Notifikasi helper
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
     setTimeout(() => {
       setNotification((curr) => (curr?.message === message ? null : curr));
-    }, 4000);
+    }, 3500);
   };
 
-  // Sync Pemuat name changes to form if set
-  useEffect(() => {
-    if (activePemuat && !formData.driverName) {
-      setFormData((prev) => ({ ...prev, driverName: activePemuat.toUpperCase() }));
-    }
-  }, [activePemuat]);
-
-  // Subscribe to real-time Firestore daily records
+  // Subscribe ke real-time Firestore daily records
   useEffect(() => {
     setLoading(true);
     setFirestoreError(null);
@@ -330,7 +165,6 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         setLoading(false);
         const msg = err.message || 'Gagal memuat data dari Firestore';
         setFirestoreError(msg);
-        showToast(`Koneksi Firestore: ${msg}`, 'error');
       }
     );
 
@@ -339,208 +173,127 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     };
   }, []);
 
-  // Submit new daily record
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Daftar nama pemuat unik untuk tombol pilih cepat
+  const allPemuatNames = useMemo(() => {
+    const nameSet = new Set<string>();
+    pemuatMaster.forEach((p) => {
+      if (p.name && p.name.trim()) {
+        nameSet.add(p.name.trim().toUpperCase());
+      }
+    });
+    records.forEach((r) => {
+      if (r.driverName) {
+        // Tambahkan nama per individu jika dipisah '/'
+        r.driverName
+          .split('/')
+          .map((part) => part.trim().toUpperCase())
+          .filter(Boolean)
+          .forEach((part) => nameSet.add(part));
+      }
+    });
+    return Array.from(nameSet).sort((a, b) => a.localeCompare(b, 'id'));
+  }, [pemuatMaster, records]);
 
-    if (!formData.truckNumber.trim()) {
-      showToast('Mohon pilih atau masukkan Nomor Unit Truk (contoh: DT 90)', 'error');
-      return;
-    }
-    if (!formData.driverName.trim()) {
-      showToast('Mohon masukkan Nama Pemuat (pilih dari daftar atau ketik)', 'error');
-      return;
-    }
-    const ton = parseFloat(String(formData.tonnage).replace(',', '.'));
-    if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
-      return;
-    }
+  // Dynamic Truck codes
+  const dynamicTruckCodes = useMemo(() => {
+    const codeSet = new Set<string>();
+    trucks.forEach((t) => {
+      if (t.code) codeSet.add(t.code.trim().toUpperCase());
+    });
+    records.forEach((r) => {
+      if (r.truckNumber) codeSet.add(r.truckNumber.trim().toUpperCase());
+    });
+    return Array.from(codeSet).sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
+  }, [trucks, records]);
 
-    setIsSubmitting(true);
-    try {
-      await addDailyRecord({
-        date: formData.date || todayStr,
-        truckNumber: formData.truckNumber.trim().toUpperCase(),
-        driverName: formData.driverName.trim().toUpperCase(),
-        tonnage: ton,
-        afdeling: formData.afdeling.trim() || 'Afdeling 1',
-        notes: (formData.notes || '').trim(),
-        ritNumber: nextRitNumber,
-      });
-
-      showToast(`Pengiriman unit ${formData.truckNumber} (${ton} Ton, Rit ${nextRitNumber} - ${formData.afdeling}) berhasil disimpan!`, 'success');
-
-      // Reset form but retain date & truck for repetitive inputs
-      setFormData((prev) => ({
-        ...prev,
-        tonnage: '' as any,
-        notes: '',
-      }));
-    } catch (err: any) {
-      console.error('Error addDoc:', err);
-      showToast(`Gagal menyimpan ke database: ${err.message}`, 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Open Edit Modal
-  const handleOpenEditModal = (record: DailyRecord) => {
-    setRecordToEdit(record);
-    setEditFormData({ ...record });
-  };
-
-  // Save Edit
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editFormData) return;
-
-    const ton = parseFloat(String(editFormData.tonnage).replace(',', '.'));
-    if (isNaN(ton) || ton <= 0) {
-      showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79)', 'error');
-      return;
-    }
-
-    setIsUpdating(true);
-    try {
-      await updateDailyRecord({
-        ...editFormData,
-        truckNumber: editFormData.truckNumber.trim().toUpperCase(),
-        driverName: editFormData.driverName.trim().toUpperCase(),
-        tonnage: ton,
-        afdeling: editFormData.afdeling.trim() || 'Afdeling 1',
-        notes: (editFormData.notes || '').trim(),
-        ritNumber: editFormData.ritNumber || 1,
-      });
-
-      showToast(`Data unit ${editFormData.truckNumber} (Rit ${editFormData.ritNumber || 1}) berhasil diperbarui!`, 'success');
-      setRecordToEdit(null);
-      setEditFormData(null);
-    } catch (err: any) {
-      showToast(`Gagal memperbarui data: ${err.message}`, 'error');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Confirm Delete
-  const confirmDelete = async () => {
-    if (!recordToDelete) return;
-    setIsDeleting(true);
-    try {
-      await deleteDailyRecord(recordToDelete.id);
-      showToast(`Catatan unit ${recordToDelete.truckNumber} berhasil dihapus.`, 'info');
-      setRecordToDelete(null);
-    } catch (err: any) {
-      showToast(`Gagal menghapus data: ${err.message}`, 'error');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  // Confirm Delete All
-  const confirmDeleteAll = async () => {
-    if (records.length === 0) return;
-    setIsDeletingAll(true);
-    try {
-      const targetIds = records.map((r) => r.id);
-      const count = await deleteAllDailyRecords(targetIds);
-      showToast(`Berhasil menghapus semua (${count}) data riwayat pengiriman!`, 'info');
-      setIsDeleteAllModalOpen(false);
-    } catch (err: any) {
-      showToast(`Gagal menghapus semua data: ${err.message}`, 'error');
-    } finally {
-      setIsDeletingAll(false);
+  // Saat memilih nama pemuat, perbarui URL tetap di ?portal=pemuat tanpa pindah ke beranda
+  const handleSelectPemuat = (name: string) => {
+    setSelectedPemuat(name);
+    if (typeof window !== 'undefined' && window.history.replaceState) {
+      const nextUrl = getPemuatPortalUrl(name || undefined);
+      window.history.replaceState({ path: nextUrl }, '', nextUrl);
     }
   };
 
   // Copy Link Khusus Pemuat
   const handleCopyLink = () => {
-    const url = getPemuatPortalUrl(activePemuat || undefined);
+    const url = getPemuatPortalUrl(selectedPemuat || undefined);
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(url);
     }
     setIsCopied(true);
-    showToast('Tautan portal pemuat berhasil disalin ke clipboard!', 'success');
+    showToast('Link Portal Pemuat berhasil disalin!', 'success');
     setTimeout(() => setIsCopied(false), 2500);
   };
 
-  // Filtered Records
-  const filteredRecords = useMemo(() => {
-    return records.filter((r) => {
-      // Filter by My Records
-      if (filterMode === 'MY_RECORDS' && activePemuat) {
-        if (!r.driverName.toLowerCase().includes(activePemuat.toLowerCase())) return false;
+  // Verifikasi PIN Admin untuk keluar ke Beranda Utama Admin
+  const handleVerifyPinAndExit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput.trim().toUpperCase() === 'TRAKSI_001') {
+      setShowPinModal(false);
+      setPinInput('');
+      setPinError('');
+      if (onExitToAdmin) {
+        onExitToAdmin();
       }
+    } else {
+      setPinError('PIN Admin salah! Akses ditolak.');
+    }
+  };
 
-      // Filter by Afdeling
-      if (filterAfdeling !== 'ALL' && r.afdeling !== filterAfdeling) return false;
+  // Catatan yang cocok dengan Pemuat yang dipilih & pencarian
+  const pemuatFilteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      if (selectedPemuat) {
+        const parts = r.driverName
+          .split('/')
+          .map((p) => p.trim().toLowerCase());
+        const target = selectedPemuat.trim().toLowerCase();
+        const isMatch =
+          parts.includes(target) || r.driverName.toLowerCase().includes(target);
+        if (!isMatch) return false;
+      }
+      if (filterTruck !== 'ALL' && r.truckNumber.toUpperCase() !== filterTruck.toUpperCase()) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTruck = r.truckNumber.toLowerCase().includes(q);
+        const matchDriver = r.driverName.toLowerCase().includes(q);
+        const matchAfdeling = r.afdeling.toLowerCase().includes(q);
+        const matchNotes = (r.notes || '').toLowerCase().includes(q);
+        if (!matchTruck && !matchDriver && !matchAfdeling && !matchNotes) return false;
+      }
+      return true;
+    });
+  }, [records, selectedPemuat, filterTruck, searchQuery]);
 
-      // Filter by Truck
-      if (filterTruck !== 'ALL' && r.truckNumber !== filterTruck) return false;
-
-      // Filter by Date Range
+  // Catatan terfilter untuk tampilan Daftar Riwayat (mengikuti filter periode)
+  const tableFilteredRecords = useMemo(() => {
+    return pemuatFilteredRecords.filter((r) => {
       if (filterDateRange === 'TODAY') {
         if (r.date !== todayStr) return false;
       } else if (filterDateRange === '7DAYS') {
         const sevenDaysAgo = getDaysAgoWIB(7);
         if (r.date < sevenDaysAgo) return false;
       } else if (filterDateRange === 'THIS_MONTH') {
-        const currentMonth = todayStr.substring(0, 7);
-        if (!r.date.startsWith(currentMonth)) return false;
-      }
-
-      // Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTruck = r.truckNumber.toLowerCase().includes(q);
-        const matchDriver = r.driverName.toLowerCase().includes(q);
-        const matchAfdeling = r.afdeling.toLowerCase().includes(q);
-        const matchNotes = (r.notes || '').toLowerCase().includes(q);
-        if (!matchTruck && !matchDriver && !matchAfdeling && !matchNotes) return false;
-      }
-
-      return true;
-    });
-  }, [records, filterMode, activePemuat, filterAfdeling, filterTruck, filterDateRange, searchQuery, todayStr]);
-
-  // Calculations for cards
-  const totalTonnage = useMemo(() => {
-    return filteredRecords.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
-  }, [filteredRecords]);
-
-  const totalTrips = filteredRecords.length;
-  const avgTonnagePerTrip = totalTrips > 0 ? totalTonnage / totalTrips : 0;
-
-  // Today specific calculations
-  const todayRecords = useMemo(() => {
-    return records.filter((r) => r.date === todayStr);
-  }, [records, todayStr]);
-
-  const todayTonnage = useMemo(() => {
-    return todayRecords.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
-  }, [todayRecords]);
-
-  // Data catatan khusus Kalender (terfilter nama/pencarian tanpa dibatasi filter rentang tanggal)
-  const calendarFilteredRecords = useMemo(() => {
-    return records.filter((r) => {
-      if (filterMode === 'MY_RECORDS' && activePemuat) {
-        if (!r.driverName.toLowerCase().includes(activePemuat.toLowerCase())) return false;
-      }
-      if (filterAfdeling !== 'ALL' && r.afdeling !== filterAfdeling) return false;
-      if (filterTruck !== 'ALL' && r.truckNumber !== filterTruck) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTruck = r.truckNumber.toLowerCase().includes(q);
-        const matchDriver = r.driverName.toLowerCase().includes(q);
-        const matchAfdeling = r.afdeling.toLowerCase().includes(q);
-        const matchNotes = (r.notes || '').toLowerCase().includes(q);
-        if (!matchTruck && !matchDriver && !matchAfdeling && !matchNotes) return false;
+        const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+        if (!r.date.startsWith(curYearMonth)) return false;
       }
       return true;
     });
-  }, [records, filterMode, activePemuat, filterAfdeling, filterTruck, searchQuery]);
+  }, [pemuatFilteredRecords, filterDateRange, todayStr, calendarYear, calendarMonth]);
+
+  // Hasil Hari Ini (WIB)
+  const todayStats = useMemo(() => {
+    const todayList = pemuatFilteredRecords.filter((r) => r.date === todayStr);
+    const ton = todayList.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
+    return {
+      trips: todayList,
+      tonnage: ton,
+      ritCount: todayList.length,
+    };
+  }, [pemuatFilteredRecords, todayStr]);
 
   // Peta agregat harian untuk kalender (YYYY-MM-DD -> metrik & daftar rit)
   const dailyStatsMap = useMemo(() => {
@@ -554,7 +307,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       afdelingList: string[];
     }>();
 
-    calendarFilteredRecords.forEach((r) => {
+    pemuatFilteredRecords.forEach((r) => {
       const dateKey = r.date;
       if (!map.has(dateKey)) {
         map.set(dateKey, {
@@ -583,12 +336,34 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     });
 
     return map;
-  }, [calendarFilteredRecords]);
+  }, [pemuatFilteredRecords]);
+
+  // Metrik ringkasan bulan yang sedang dibuka di kalender
+  const monthMetrics = useMemo(() => {
+    const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    let monthTon = 0;
+    let monthRit = 0;
+    const activeDays = new Set<string>();
+
+    pemuatFilteredRecords.forEach((r) => {
+      if (r.date.startsWith(curYearMonth)) {
+        monthTon += Number(r.tonnage) || 0;
+        monthRit += 1;
+        activeDays.add(r.date);
+      }
+    });
+
+    return {
+      monthTon,
+      monthRit,
+      activeDaysCount: activeDays.size,
+      avgTonPerRit: monthRit > 0 ? monthTon / monthRit : 0,
+    };
+  }, [pemuatFilteredRecords, calendarYear, calendarMonth]);
 
   // Grid sel kalender bulanan (Senin s/d Minggu)
   const calendarCells = useMemo(() => {
     const firstDay = new Date(calendarYear, calendarMonth, 1);
-    // Konversi hari: 0 = Min, 1 = Sen -> jadikan Senin = 0 s/d Minggu = 6
     const startDayOfWeek = (firstDay.getDay() + 6) % 7;
 
     const daysInCurrentMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
@@ -609,7 +384,6 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       };
     }> = [];
 
-    // Hari dari bulan sebelumnya
     for (let i = startDayOfWeek - 1; i >= 0; i--) {
       const dayNum = daysInPrevMonth - i;
       const prevDate = new Date(calendarYear, calendarMonth - 1, dayNum);
@@ -626,21 +400,19 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       });
     }
 
-    // Hari bulan aktif
     for (let day = 1; day <= daysInCurrentMonth; day++) {
       const curM = String(calendarMonth + 1).padStart(2, '0');
       const curD = String(day).padStart(2, '0');
       const dateStr = `${calendarYear}-${curM}-${curD}`;
       cells.push({
         dateStr,
-        dayNum: day,
+        dayNum,
         isCurrentMonth: true,
         isToday: dateStr === todayStr,
         stat: dailyStatsMap.get(dateStr),
       });
     }
 
-    // Hari bulan berikutnya pelengkap grid (35 atau 42)
     const totalCells = cells.length > 35 ? 42 : 35;
     const remaining = totalCells - cells.length;
     for (let day = 1; day <= remaining; day++) {
@@ -651,7 +423,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       const dateStr = `${nextY}-${nextM}-${nextD}`;
       cells.push({
         dateStr,
-        dayNum: day,
+        dayNum,
         isCurrentMonth: false,
         isToday: dateStr === todayStr,
         stat: dailyStatsMap.get(dateStr),
@@ -660,31 +432,6 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
     return cells;
   }, [calendarYear, calendarMonth, todayStr, dailyStatsMap]);
-
-  // Metrik ringkasan bulan yang sedang dibuka di kalender
-  const monthMetrics = useMemo(() => {
-    const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
-    let monthTon = 0;
-    let monthRit = 0;
-    const uniqueLoaders = new Set<string>();
-    const activeDays = new Set<string>();
-
-    calendarFilteredRecords.forEach((r) => {
-      if (r.date.startsWith(curYearMonth)) {
-        monthTon += Number(r.tonnage) || 0;
-        monthRit += 1;
-        activeDays.add(r.date);
-        if (r.driverName) uniqueLoaders.add(r.driverName);
-      }
-    });
-
-    return {
-      monthTon,
-      monthRit,
-      activeDaysCount: activeDays.size,
-      loadersCount: uniqueLoaders.size,
-    };
-  }, [calendarFilteredRecords, calendarYear, calendarMonth]);
 
   // Navigasi Bulan Kalender
   const handlePrevMonth = () => {
@@ -715,27 +462,36 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
   // Export to Excel
   const handleExportExcel = () => {
-    if (filteredRecords.length === 0) {
+    const targetList = viewMode === 'calendar' ? pemuatFilteredRecords : tableFilteredRecords;
+    if (targetList.length === 0) {
       showToast('Belum ada data untuk diekspor.', 'info');
       return;
     }
 
-    const rows = filteredRecords.map((r, index) => ({
+    const rows = targetList.map((r, index) => ({
       No: index + 1,
       Tanggal: r.date,
+      Afdeling: r.afdeling,
+      'Urutan Rit': `Rit ${r.ritNumber || 1}`,
       'Unit Truk': r.truckNumber,
       'Nama Pemuat': r.driverName,
-      Afdeling: r.afdeling,
       'Tonase (Ton)': r.tonnage,
       'Catatan / Keterangan': r.notes || '-',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Catatan Harian Pemuat');
-    XLSX.writeFile(workbook, `Catatan_Pemuat_TBS_${todayStr}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Hasil Muat TBS');
+    const suffix = selectedPemuat ? `_${selectedPemuat.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
+    XLSX.writeFile(workbook, `Hasil_Pemuat_TBS${suffix}_${todayStr}.xlsx`);
     showToast('File Excel berhasil diunduh.', 'success');
   };
+
+  const currentPortalUrl = getPemuatPortalUrl(selectedPemuat || undefined);
+  const waShareUrl = getWhatsAppSharePemuatUrl({
+    pemuatName: selectedPemuat || undefined,
+    directUrl: currentPortalUrl,
+  });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
@@ -759,12 +515,12 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         </div>
       )}
 
-      {/* TOP NAVIGATION BAR */}
+      {/* TOP NAVIGATION BAR (TERISOLASI & TERKUNCI UNTUK PEMUAT) */}
       <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-16 gap-2">
             {/* Branding */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-white p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-400/40 overflow-hidden shrink-0">
                 <img
                   src="/assets/aistudio/images_70037338.jpeg"
@@ -772,55 +528,60 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   className="w-full h-full object-contain"
                 />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-base sm:text-lg tracking-tight text-white">
-                    Portal Pemuat TBS
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-extrabold text-sm sm:text-lg tracking-tight text-white truncate">
+                    Portal Hasil Pemuat TBS
                   </span>
-                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30">
+                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 rounded border border-emerald-500/30 shrink-0">
                     Traksi KPU
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 hidden sm:block">
-                  Catatan Ritase & Tonase TBS Kebun &bull; Kalimantan Plantation Unit
+                <p className="text-[11px] text-slate-400 hidden sm:block truncate">
+                  Kalimantan Plantation Unit &bull; Rekap Hasil Ritase &amp; Tonase Muat TBS
                 </p>
               </div>
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2">
-              {/* Firestore Indicator */}
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs font-mono text-emerald-400">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span>Firestore Online</span>
-              </div>
-
-              {/* Copy Link Button */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Salin Link */}
               <button
+                type="button"
                 onClick={handleCopyLink}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
-                title="Salin tautan laman ini untuk disimpan di WhatsApp / HP"
+                title="Salin link portal hasil pemuat ini"
               >
                 {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">{isCopied ? 'Tersalin' : 'Salin Link'}</span>
+                <span>{isCopied ? 'Tersalin' : 'Salin Link'}</span>
               </button>
 
-              {/* Exit to Admin button if opened by admin */}
+              {/* Bagikan WA */}
+              <a
+                href={waShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-sm"
+                title="Kirim link hasil muat via WhatsApp"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>Bagikan WA</span>
+              </a>
+
+              {/* Tombol Beralih ke Beranda Admin (Terkunci PIN Admin) */}
               {onExitToAdmin && (
                 <button
+                  type="button"
                   onClick={() => {
-                    if (window.confirm('Keluar dari portal pemuat dan kembali ke dashboard admin utama?')) {
-                      onExitToAdmin();
-                    }
+                    setPinInput('');
+                    setPinError('');
+                    setShowPinModal(true);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition cursor-pointer"
-                  title="Kembali ke Dashboard Admin Utama"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition cursor-pointer"
+                  title="Buka Beranda Admin (Perlu PIN Admin)"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Mode Admin</span>
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Admin</span>
                 </button>
               )}
             </div>
@@ -829,467 +590,260 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       </header>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Header Bar Portal Pemuat */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
-              <Truck className="w-5 h-5 text-emerald-400" />
-              <span>Input & Riwayat Muatan TBS Lapangan</span>
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Input pengangkutan TBS langsung tersimpan ke database cloud secara real-time
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsPemuatManagerOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Kelola Daftar Pemuat</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 3 KARTU RINGKASAN TOTAL */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Total Tonase */}
-          <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-lg relative overflow-hidden group">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                {filterDateRange === 'TODAY' ? 'Tonase Hari Ini' : 'Total Tonase'}
-              </span>
-              <Scale className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {totalTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <span className="text-xs sm:text-sm font-semibold text-emerald-400 ml-1.5">Ton</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Dari <strong className="text-slate-200">{totalTrips} Ritase</strong> terfilter
-            </p>
-          </div>
-
-          {/* Total Pengiriman / Rit */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-sky-400">Total Pengiriman</span>
-              <Truck className="w-5 h-5 text-sky-400" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {totalTrips}
-              <span className="text-xs sm:text-sm font-semibold text-sky-400 ml-1.5">Rit</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Total perjalanan angkut ke PKS
-            </p>
-          </div>
-
-          {/* Rata-rata Ton per Rit */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Rerata Muatan</span>
-              <TrendingUp className="w-5 h-5 text-amber-400" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {avgTonnagePerTrip.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              <span className="text-xs sm:text-sm font-semibold text-amber-400 ml-1.5">Ton / Rit</span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Kapasitas rata-rata per pengangkutan
-            </p>
-          </div>
-        </div>
-
-        {/* FORM INPUT CEPAT LAPANGAN */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
-                <Plus className="w-5 h-5" />
-              </span>
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-white">
-                  Form Input Pengiriman TBS Baru
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Data otomatis tersimpan ke cloud Firebase Firestore secara langsung
-                </p>
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 py-5 space-y-5">
+        {/* Banner Informasi Mode Hanya Lihat & Pilih Nama Pemuat */}
+        <div className="bg-slate-900/95 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0 mt-0.5">
+                <User className="w-5 h-5" />
               </div>
-            </div>
-
-            {/* Indikator Rit Otomatis */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 text-xs font-mono font-bold">
-              <span>Rit Otomatis:</span>
-              <span className="bg-sky-500 text-slate-950 px-2 py-0.5 rounded font-black">
-                Rit {nextRitNumber}
-              </span>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-              {/* Tanggal */}
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  Tanggal:
-                </label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {/* Nomor Unit Truk */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                    Nomor Unit Truk:
-                  </label>
-                  <span className="text-[10px] text-emerald-400 font-mono">
-                    {dynamicTruckCodes.length} Unit Armada
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base sm:text-lg font-black text-white">
+                    {selectedPemuat ? `Hasil Muat TBS: ${selectedPemuat}` : 'Rekap Hasil Muat Seluruh Pemuat TBS'}
+                  </h1>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-emerald-500/30 font-bold uppercase flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Data Terkunci (Hanya Lihat)</span>
                   </span>
                 </div>
-                <input
-                  type="text"
-                  list="pemuat-portal-truck-list"
-                  value={formData.truckNumber}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, truckNumber: e.target.value }))}
-                  placeholder={dynamicTruckCodes[0] ? `Contoh: ${dynamicTruckCodes[0]}` : 'Pilih Unit DT'}
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-bold uppercase"
-                />
-                <datalist id="pemuat-portal-truck-list">
-                  {dynamicTruckCodes.map((dt) => (
-                    <option key={dt} value={dt} />
-                  ))}
-                </datalist>
-                {/* Quick Unit Pills dari Seluruh Armada yang Terinput */}
-                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                  {dynamicTruckCodes.map((dt) => (
-                    <button
-                      key={dt}
-                      type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, truckNumber: dt }))}
-                      className={`text-[11px] px-2 py-1 rounded-lg font-mono transition border cursor-pointer ${
-                        formData.truckNumber.toUpperCase() === dt.toUpperCase()
-                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm'
-                          : 'bg-slate-800/80 text-slate-300 hover:text-white border-slate-700'
-                      }`}
-                    >
-                      {dt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tonase (Ton) */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                    Tonase (Tonase dalam Ton):
-                  </label>
-                  {formData.tonnage && (
-                    <span className="text-[10px] font-mono font-bold text-emerald-400">
-                      {String(formData.tonnage).replace('.', ',')} Ton
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formData.tonnage}
-                  onChange={(e) => handleTonInputChange(e.target.value, false)}
-                  placeholder="Contoh: 6,79"
-                  required
-                  className="w-full bg-slate-950 border border-emerald-500/50 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-emerald-400 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400 font-bold font-mono text-base"
-                />
-              </div>
-
-              {/* Afdeling */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  Afdeling:
-                </label>
-                <select
-                  value={formData.afdeling}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, afdeling: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500 font-semibold"
-                >
-                  {QUICK_AFDELINGS.map((afd) => (
-                    <option key={afd} value={afd}>
-                      {afd}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-sky-400 mt-1 font-mono">
-                  {afdelingRitsOnDate.length} rit tercatat hari ini
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Pilih nama Anda di bawah ini untuk melihat total tonase, jumlah ritase, dan urutan rit per afdeling secara langsung.
                 </p>
               </div>
-
-              {/* Box Preview Ritase Otomatis */}
-              <div className="bg-slate-950/90 border border-sky-500/30 rounded-xl p-2.5 flex flex-col justify-between">
-                <span className="text-[10px] uppercase font-bold text-sky-400 tracking-wider">
-                  Nomor Rit Otomatis
-                </span>
-                <div className="my-auto">
-                  <div className="text-xl font-black text-sky-300 font-mono">
-                    Rit {nextRitNumber}
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate">
-                    Khusus {formData.afdeling}
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Tombol Pilih Angka Tonase (1, 2, 3, 4, 5, 6, 7, 8, 9, 0) */}
-            <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <Scale className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Pilih Angka Tonase Cepat (Tekan <strong className="text-emerald-400">6</strong>, <strong className="text-emerald-400">7</strong>, <strong className="text-emerald-400">9</strong> &rarr; <strong className="text-white">6,79</strong> ton):</span>
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleTonBackspace(false)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 transition cursor-pointer"
-                  >
-                    ⌫ Hapus
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData((prev) => ({ ...prev, tonnage: '' as any }))}
-                    className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 text-rose-300 text-xs font-bold border border-rose-800/50 transition cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
-                  <button
-                    key={digit}
-                    type="button"
-                    onClick={() => handleTonDigitPress(digit, false)}
-                    className="py-2 rounded-lg bg-slate-900 hover:bg-emerald-600 active:scale-95 text-white font-mono font-bold text-sm border border-slate-700 hover:border-emerald-400 transition shadow-sm cursor-pointer"
-                  >
-                    {digit}
-                  </button>
-                ))}
-              </div>
+            <div className="text-xs font-mono text-emerald-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 self-start sm:self-center shrink-0">
+              Hari Ini: <strong className="text-white">{formatDateIndoFull(todayStr)}</strong>
             </div>
+          </div>
 
-            {/* Nama Pemuat (Multi-Select Otomatis dengan Garis Miring) */}
-            <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Nama Pemuat (Bisa Lebih Dari 1 Orang):</span>
-                  </label>
-                  {selectedPemuatList.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      {selectedPemuatList.length} Terpilih
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {selectedPemuatList.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, driverName: '' }))}
-                      className="text-[10px] text-slate-400 hover:text-rose-400 transition cursor-pointer"
-                    >
-                      Bersihkan
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setIsPemuatManagerOpen(true)}
-                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>+ Tulis / Kelola Pemuat</span>
-                  </button>
-                </div>
-              </div>
-
-              <input
-                type="text"
-                value={formData.driverName}
-                onChange={(e) => setFormData((prev) => ({ ...prev, driverName: e.target.value }))}
-                placeholder="Klik tombol nama di bawah atau ketik manual (contoh: ANTON/DELFIN/YUVEN)..."
-                required
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 font-mono font-bold"
-              />
-
-              {/* Tombol Cepat Multi-Select Pemuat */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {pemuatMaster.map((p) => {
-                  const isSelected = selectedPemuatList.includes(p.name.toUpperCase());
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => handleTogglePemuatName(p.name)}
-                      className={`text-xs px-2.5 py-1 rounded-lg font-medium transition border flex items-center gap-1 cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-sm shadow-emerald-500/20'
-                          : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800'
-                      }`}
-                    >
-                      {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                      <span>{p.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-slate-400">
-                * Klik nama pemuat untuk memilih lebih dari 1 orang (otomatis digabung pemisah garis miring, cth: <strong>ANTON/DELFIN/YUVEN</strong>).
-              </p>
-            </div>
-
-            {/* Catatan / Keterangan & Tombol Simpan */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-              <input
-                type="text"
-                value={formData.notes}
-                onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                placeholder="Catatan tambahan (contoh: TBS Masak Blok B3, Trip Siang) - Opsional"
-                className="w-full flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-              />
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-bold text-xs sm:text-sm transition shadow-lg shadow-emerald-500/25 shrink-0 cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Menyimpan ke Cloud...</span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    <span>Simpan Pengiriman TBS</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* TABEL & KALENDER RIWAYAT INPUT DATA HARIAN */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-          {/* Header & Controls: Mode Switcher, Filter & Export */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                  {viewMode === 'calendar' ? (
-                    <CalendarDays className="w-5 h-5 text-emerald-400" />
-                  ) : (
-                    <Clock className="w-5 h-5 text-emerald-400" />
-                  )}
-                  {viewMode === 'calendar' ? 'Kalender Muat TBS Bulanan' : 'Riwayat Pengiriman TBS Real-Time'}
-                </h2>
-
-                {/* View Mode Toggle: Calendar vs Table */}
-                <div className="inline-flex items-center p-1 bg-slate-950 rounded-xl border border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('calendar')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      viewMode === 'calendar'
-                        ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <CalendarDays className="w-3.5 h-3.5" />
-                    <span>Kalender</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('table')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      viewMode === 'table'
-                        ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Table className="w-3.5 h-3.5" />
-                    <span>Tabel & Riwayat</span>
-                  </button>
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                {viewMode === 'calendar'
-                  ? `Rekap ritase per tanggal untuk bulan ${INDO_MONTHS[calendarMonth]} ${calendarYear} • Klik tanggal untuk detail lengkap`
-                  : `Menampilkan ${filteredRecords.length} dari ${records.length} catatan ritase`}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Tombol Toggle Mode: Semua Pemuat vs Hanya Saya */}
+          {/* Pilihan Cepat Nama Pemuat */}
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Pilih Nama Pemuat untuk Melihat Hasil:
+            </label>
+            <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
-                onClick={() => setFilterMode((prev) => (prev === 'MY_RECORDS' ? 'ALL' : 'MY_RECORDS'))}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
-                  filterMode === 'MY_RECORDS'
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                onClick={() => handleSelectPemuat('')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                  selectedPemuat === ''
+                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
                 }`}
               >
-                <User className="w-3.5 h-3.5" />
-                <span>{filterMode === 'MY_RECORDS' ? `Khusus: ${activePemuat}` : 'Semua Pemuat'}</span>
+                Semua Pemuat
               </button>
+              {allPemuatNames.map((name) => {
+                const isActive = selectedPemuat.toUpperCase() === name.toUpperCase();
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => handleSelectPemuat(isActive ? '' : name)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border flex items-center gap-1.5 cursor-pointer ${
+                      isActive
+                        ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-emerald-500/40 hover:text-white'
+                    }`}
+                  >
+                    {isActive && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    <span>{name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
-              {/* Ekspor Excel */}
+        {/* Warning jika terjadi kendala koneksi Firestore */}
+        {firestoreError && (
+          <div className="p-4 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <span>Kendala koneksi database: {firestoreError}</span>
+          </div>
+        )}
+
+        {/* 3 KARTU RINGKASAN HASIL MUAT (SEDERHANA & MUDAH DIPAHAMI) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {/* 1. Hasil Hari Ini */}
+          <div
+            onClick={() => setSelectedDateForDetail(todayStr)}
+            className="bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 border border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-lg cursor-pointer hover:border-emerald-400 transition"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                Hasil Muat Hari Ini
+              </span>
+              <Calendar className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+                {todayStats.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-emerald-400">Ton</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-300 pt-2 border-t border-slate-800/80">
+              <span>Jumlah Pengiriman:</span>
+              <strong className="text-emerald-300 font-mono">{todayStats.ritCount} Rit</strong>
+            </div>
+          </div>
+
+          {/* 2. Total Tonase Bulan Ini */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-sky-400">
+                Total Tonase ({INDO_MONTHS[calendarMonth]})
+              </span>
+              <Scale className="w-4 h-4 text-sky-400" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+                {monthMetrics.monthTon.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-sky-400">Ton</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+              <span>Hari Kerja Aktif:</span>
+              <strong className="text-white font-mono">{monthMetrics.activeDaysCount} Hari</strong>
+            </div>
+          </div>
+
+          {/* 3. Total Ritase Bulan Ini */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                Total Ritase ({INDO_MONTHS[calendarMonth]})
+              </span>
+              <Truck className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+                {monthMetrics.monthRit}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-amber-400">Rit</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+              <span>Rata-rata per Rit:</span>
+              <strong className="text-white font-mono">
+                {monthMetrics.avgTonPerRit.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T/Rit
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        {/* REKAP URUTAN RITASE PER AFDELING HARI INI (Jika Ada Muatan Hari Ini) */}
+        {todayStats.trips.length > 0 && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-emerald-400" />
+                <span>Urutan Ritase per Afdeling Hari Ini ({formatDateIndoFull(todayStr)})</span>
+              </div>
+              <span className="text-xs font-mono text-emerald-400 font-bold">
+                Total Hari Ini: {todayStats.ritCount} Rit ({todayStats.tonnage.toFixed(2)} Ton)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {(() => {
+                const afdMap = new Map<string, DailyRecord[]>();
+                todayStats.trips.forEach((t) => {
+                  const afd = t.afdeling || 'Afdeling 1';
+                  if (!afdMap.has(afd)) afdMap.set(afd, []);
+                  afdMap.get(afd)!.push(t);
+                });
+                return Array.from(afdMap.entries())
+                  .sort(([a], [b]) => a.localeCompare(b, 'id', { numeric: true }))
+                  .map(([afdName, tList]) => {
+                    const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
+                    const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
+                    return (
+                      <div key={afdName} className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs space-y-2">
+                        <div className="flex items-center justify-between gap-2 font-bold text-white pb-1.5 border-b border-slate-800/80">
+                          <span>{afdName}</span>
+                          <span className="text-emerald-400 font-mono text-[11px]">
+                            {tList.length} Rit ({totalTons.toFixed(2)}T)
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {sortedList.map((t, idx) => (
+                            <div
+                              key={t.id}
+                              className="text-[11px] px-2 py-1 rounded-lg bg-slate-900 border border-slate-800/90 font-mono flex items-center justify-between gap-1.5"
+                            >
+                              <span className="truncate">
+                                <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong>{' '}
+                                <span className="text-white font-bold">{t.truckNumber}</span> &bull;{' '}
+                                <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                              </span>
+                              <span className="text-emerald-400 font-bold shrink-0">{t.tonnage}T</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* KALENDER BULANAN & DAFTAR RIWAYAT HASIL MUAT */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+          {/* Header & Controls */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="inline-flex items-center p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('calendar')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    viewMode === 'calendar'
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  <span>Kalender Hasil</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('table')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    viewMode === 'table'
+                      ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Table className="w-3.5 h-3.5" />
+                  <span>Daftar Riwayat</span>
+                </button>
+              </div>
+              <span className="text-xs text-slate-400">
+                {viewMode === 'calendar'
+                  ? 'Ketuk tanggal pada kalender untuk melihat rincian muatan'
+                  : `Menampilkan ${tableFilteredRecords.length} catatan pengiriman`}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition cursor-pointer"
-                title="Unduh data sebagai file Excel"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Ekspor Excel</span>
+                <span>Unduh Excel</span>
               </button>
-
-              {/* Hapus Semua Riwayat */}
-              {records.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteAllModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold transition cursor-pointer"
-                  title="Hapus semua data riwayat input harian"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Hapus Semua</span>
-                </button>
-              )}
             </div>
           </div>
 
-          {/* ========================================================================= */}
-          {/* TAMPILAN 1: KALENDER BULANAN INTERAKTIF */}
-          {/* ========================================================================= */}
           {viewMode === 'calendar' ? (
             <div className="space-y-4">
-              {/* Month Navigation & Month Stat Summary */}
+              {/* Navigasi Bulan */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-950 p-3 sm:p-4 rounded-xl border border-slate-800">
                 <div className="flex items-center gap-2">
                   <button
@@ -1301,7 +855,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     <ChevronLeft className="w-4 h-4" />
                   </button>
 
-                  <div className="px-3 py-1 text-center min-w-[160px]">
+                  <div className="px-3 py-1 text-center min-w-[150px]">
                     <span className="text-base sm:text-lg font-bold text-white tracking-wide">
                       {INDO_MONTHS[calendarMonth]} {calendarYear}
                     </span>
@@ -1319,59 +873,32 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   <button
                     type="button"
                     onClick={handleGoToToday}
-                    className="ml-2 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 text-xs font-semibold border border-slate-800 transition cursor-pointer"
+                    className="ml-1 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold border border-emerald-500/30 transition cursor-pointer"
                   >
                     Hari Ini
                   </button>
                 </div>
 
-                {/* Ringkasan Cepat Bulan Ini */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 text-xs">
-                  <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-1.5">
-                    <span className="text-slate-400">Total Muat:</span>
-                    <strong className="text-emerald-400 font-mono font-bold">
-                      {monthMetrics.monthTon.toLocaleString('id-ID', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}{' '}
-                      Ton
+                {/* Ringkasan Bulan */}
+                <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+                  <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400">Total Muat: </span>
+                    <strong className="text-emerald-400 font-mono">
+                      {monthMetrics.monthTon.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Ton
                     </strong>
                   </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-1.5">
-                    <span className="text-slate-400">Ritase:</span>
-                    <strong className="text-white font-mono font-bold">{monthMetrics.monthRit} Rit</strong>
+                  <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400">Ritase: </span>
+                    <strong className="text-white font-mono">{monthMetrics.monthRit} Rit</strong>
                   </div>
-                  <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-1.5">
-                    <span className="text-slate-400">Hari Aktif:</span>
-                    <strong className="text-white font-mono font-bold">{monthMetrics.activeDaysCount} Hari</strong>
+                  <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400">Hari Aktif: </span>
+                    <strong className="text-white font-mono">{monthMetrics.activeDaysCount} Hari</strong>
                   </div>
                 </div>
               </div>
 
-              {/* Search Bar for Calendar Filtering */}
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter nama pemuat, nomor truk DT, afdeling, atau catatan pada kalender..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {/* Petunjuk Interaksi */}
-              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span>Ada Aktivitas Muat</span>
-                  <span className="inline-block w-2.5 h-2.5 rounded-full border border-emerald-400 bg-emerald-500/20 ml-2" />
-                  <span>Hari Ini</span>
-                </div>
-                <span className="text-slate-500 hidden sm:inline">Klik pada kotak tanggal untuk melihat rincian muat</span>
-              </div>
-
-              {/* Header Nama Hari (Senin - Minggu) */}
+              {/* Header Nama Hari */}
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-center text-xs font-bold text-slate-400">
                 {INDO_DAYS_HEADER.map((day, idx) => (
                   <div
@@ -1386,7 +913,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 ))}
               </div>
 
-              {/* Grid Tanggal Kalender (7 Kolom) */}
+              {/* Grid Tanggal Kalender */}
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {calendarCells.map((cell) => {
                   const hasData = cell.stat && cell.stat.tripCount > 0;
@@ -1396,19 +923,18 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     <div
                       key={cell.dateStr}
                       onClick={() => setSelectedDateForDetail(cell.dateStr)}
-                      className={`relative min-h-[95px] sm:min-h-[125px] p-1.5 sm:p-2 rounded-xl border transition-all duration-150 flex flex-col justify-between cursor-pointer select-none ${
+                      className={`relative min-h-[88px] sm:min-h-[115px] p-1.5 sm:p-2 rounded-xl border transition-all duration-150 flex flex-col justify-between cursor-pointer select-none ${
                         cell.isCurrentMonth
                           ? hasData
-                            ? 'bg-slate-950/90 border-slate-700/80 hover:border-emerald-500/80 hover:bg-slate-900/90 hover:shadow-lg hover:shadow-emerald-500/10'
-                            : 'bg-slate-950/50 border-slate-800/60 hover:border-slate-700 hover:bg-slate-900/40'
-                          : 'bg-slate-950/20 border-slate-900/40 opacity-40 hover:opacity-80'
+                            ? 'bg-slate-950/90 border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-900/90 shadow-sm'
+                            : 'bg-slate-950/50 border-slate-800/60 hover:border-slate-700'
+                          : 'bg-slate-950/20 border-slate-900/40 opacity-40 hover:opacity-75'
                       } ${
                         cell.isToday
-                          ? 'ring-2 ring-emerald-400/80 border-emerald-500 bg-emerald-950/15'
+                          ? 'ring-2 ring-emerald-400 border-emerald-500 bg-emerald-950/20'
                           : ''
                       }`}
                     >
-                      {/* Baris Atas: Nomor Tanggal & Indikator Hari Ini */}
                       <div className="flex items-center justify-between">
                         <span
                           className={`inline-flex items-center justify-center text-xs font-bold font-mono rounded-md px-1.5 py-0.5 ${
@@ -1421,23 +947,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                         >
                           {cell.dayNum}
                         </span>
-
-                        {cell.isToday && (
-                          <span className="hidden md:inline-block text-[9px] uppercase tracking-wider font-extrabold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                            Hari Ini
-                          </span>
-                        )}
-
                         {hasData && !cell.isToday && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
                         )}
                       </div>
 
-                      {/* Tengah: Metrik Tonase & Ritase */}
                       {hasData && stats ? (
                         <div className="my-1 space-y-1">
-                          {/* Tonase Card */}
-                          <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-md px-1 sm:px-1.5 py-0.5 text-center">
+                          <div className="bg-emerald-500/15 border border-emerald-500/30 rounded-md px-1 py-0.5 text-center">
                             <span className="text-[11px] sm:text-xs font-black text-emerald-400 font-mono block leading-tight">
                               {stats.totalTonnage.toLocaleString('id-ID', {
                                 minimumFractionDigits: 1,
@@ -1446,55 +963,25 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                               <span className="text-[9px] font-semibold text-emerald-400/80 ml-0.5">T</span>
                             </span>
                           </div>
-
-                          {/* Ritase & Truk */}
                           <div className="flex items-center justify-center gap-1 text-[10px] text-slate-300 font-mono">
                             <span className="font-bold text-white">{stats.tripCount}</span>
                             <span className="text-slate-400">Rit</span>
                           </div>
-
-                          {/* Daftar Nama Pemuat (Singkat & Rapi) */}
-                          <div className="hidden sm:block pt-0.5">
-                            <div className="flex flex-wrap gap-1 max-h-10 overflow-hidden">
-                              {stats.pemuatList.slice(0, 2).map((nama: string) => (
-                                <span
-                                  key={nama}
-                                  className="text-[9px] font-semibold bg-slate-900 border border-slate-700/80 text-slate-200 px-1 py-0.5 rounded truncate max-w-[70px]"
-                                  title={nama}
-                                >
-                                  {nama}
-                                </span>
-                              ))}
-                              {stats.pemuatList.length > 2 && (
-                                <span className="text-[9px] text-emerald-400 font-bold bg-slate-900 px-1 py-0.5 rounded border border-slate-800">
-                                  +{stats.pemuatList.length - 2}
-                                </span>
-                              )}
-                            </div>
-                          </div>
                         </div>
                       ) : (
                         <div className="my-auto py-2 text-center">
-                          <span className="text-[10px] text-slate-600 font-mono">-</span>
+                          <span className="text-[10px] text-slate-700 font-mono">-</span>
                         </div>
                       )}
 
-                      {/* Baris Bawah: Hint / Jumlah Pemuat Mobile */}
                       {hasData && stats ? (
                         <div className="pt-0.5 flex items-center justify-between text-[9px] text-slate-400 border-t border-slate-900/60">
-                          <span className="sm:hidden text-slate-300 truncate font-medium">
-                            {stats.pemuatList[0] || ''}
-                            {stats.pemuatList.length > 1 ? ` (+${stats.pemuatList.length - 1})` : ''}
+                          <span className="truncate font-medium text-slate-300">
+                            {stats.truckList.slice(0, 2).join(', ')}
                           </span>
-                          <span className="hidden sm:inline text-slate-500 font-medium group-hover:text-emerald-400">
-                            {stats.truckList.join(', ')}
-                          </span>
-                          <span className="text-emerald-400 font-mono text-[9px] ml-auto">Rincian &rarr;</span>
                         </div>
                       ) : (
-                        <div className="text-[9px] text-slate-700 text-center opacity-0 group-hover:opacity-100 transition">
-                          Kosong
-                        </div>
+                        <div className="h-3" />
                       )}
                     </div>
                   );
@@ -1502,32 +989,27 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
               </div>
             </div>
           ) : (
-            /* ========================================================================= */
-            /* TAMPILAN 2: TABEL & RIWAYAT LIST VIEW */
-            /* ========================================================================= */
+            /* TAMPILAN DAFTAR RIWAYAT (READ-ONLY) */
             <div className="space-y-4">
-              {/* Filter Bar (Search + Truck Filter + Date Range) */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                {/* Search Input */}
                 <div className="relative sm:col-span-5">
                   <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari nomor truk DT, pemuat, afdeling, catatan..."
+                    placeholder="Cari nomor truk DT, pemuat, afdeling..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
-                {/* Filter Unit Truk Sesuai Armada */}
                 <div className="sm:col-span-3">
                   <select
                     value={filterTruck}
                     onChange={(e) => setFilterTruck(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="ALL">Semua Truk ({dynamicTruckCodes.length} Unit)</option>
+                    <option value="ALL">Semua Unit Truk</option>
                     {dynamicTruckCodes.map((dt) => (
                       <option key={dt} value={dt}>
                         {dt}
@@ -1536,7 +1018,6 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   </select>
                 </div>
 
-                {/* Filter Date Range */}
                 <div className="sm:col-span-4 flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
                   {(['TODAY', '7DAYS', 'THIS_MONTH', 'ALL'] as const).map((range) => {
                     const labels: Record<string, string> = {
@@ -1563,189 +1044,87 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 </div>
               </div>
 
-              {/* Mobile Cards (Visible on small screens) */}
-              <div className="block lg:hidden space-y-2.5">
-                {filteredRecords.length === 0 ? (
-                  <div className="text-center py-10 text-slate-500 text-xs bg-slate-950/50 rounded-xl border border-slate-800/80">
-                    <Truck className="w-8 h-8 mx-auto text-slate-600 mb-2 opacity-50" />
-                    <p className="font-semibold text-slate-400">Tidak ada catatan pengiriman ditemukan</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Gunakan form di atas untuk mencatat pengiriman TBS pertama hari ini.</p>
-                  </div>
-                ) : (
-                  filteredRecords.map((r) => (
+              {tableFilteredRecords.length === 0 ? (
+                <div className="text-center py-10 text-slate-500 text-xs bg-slate-950/50 rounded-xl border border-slate-800/80">
+                  <Truck className="w-8 h-8 mx-auto text-slate-600 mb-2 opacity-50" />
+                  <p className="font-semibold text-slate-400">Belum ada catatan muatan pada periode ini</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {tableFilteredRecords.map((r, idx) => (
                     <div
                       key={r.id}
-                      className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 transition space-y-2"
+                      className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                            {r.truckNumber}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-slate-500 text-xs font-mono w-5">{idx + 1}.</span>
+                        <span className="font-mono text-xs text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                          {r.date}
+                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                          Rit {r.ritNumber || 1}
+                        </span>
+                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
+                          {r.truckNumber}
+                        </span>
+                        <span className="text-xs font-bold text-white">{r.driverName}</span>
+                        <span className="text-xs text-slate-400">&bull; {r.afdeling}</span>
+                        {r.notes && (
+                          <span className="text-[11px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded">
+                            ({r.notes})
                           </span>
-                          <span className="text-xs text-slate-300 font-medium">{r.afdeling}</span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                            Rit {r.ritNumber || 1}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-base font-black text-emerald-400 font-mono">
-                            {r.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                            <span className="text-[10px] font-semibold">Ton</span>
-                          </span>
-                        </div>
+                        )}
                       </div>
 
-                      <div className="flex items-center justify-between text-xs text-slate-400 pt-1 border-t border-slate-900">
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-200 font-semibold">{r.driverName}</span>
-                          <span>•</span>
-                          <span>{r.date}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditModal(r)}
-                            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition"
-                            title="Edit data"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setRecordToDelete(r)}
-                            className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 transition"
-                            title="Hapus data"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                      <div className="text-right sm:shrink-0 border-t sm:border-t-0 border-slate-900 pt-1.5 sm:pt-0">
+                        <span className="text-base font-black text-emerald-400 font-mono">
+                          {r.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                          <span className="text-xs font-semibold text-emerald-400/80">Ton</span>
+                        </span>
                       </div>
-
-                      {r.notes && (
-                        <p className="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg font-mono">
-                          {r.notes}
-                        </p>
-                      )}
                     </div>
-                  ))
-                )}
-              </div>
-
-              {/* Desktop Table View (Visible on lg screens) */}
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
-                      <th className="pb-3 font-semibold w-10">No</th>
-                      <th className="pb-3 font-semibold">Tanggal</th>
-                      <th className="pb-3 font-semibold">Rit</th>
-                      <th className="pb-3 font-semibold">Unit Truk</th>
-                      <th className="pb-3 font-semibold">Pemuat</th>
-                      <th className="pb-3 font-semibold">Afdeling</th>
-                      <th className="pb-3 font-semibold text-right">Tonase</th>
-                      <th className="pb-3 font-semibold">Catatan</th>
-                      <th className="pb-3 font-semibold text-center w-24">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-medium">
-                    {filteredRecords.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="py-12 text-center text-slate-500">
-                          <Truck className="w-8 h-8 mx-auto text-slate-600 mb-2 opacity-50" />
-                          <p className="font-semibold text-slate-400">Tidak ada catatan pengiriman</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">Input data baru melalui form di atas.</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredRecords.map((r, idx) => (
-                        <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 text-slate-500 font-mono">{idx + 1}</td>
-                          <td className="py-3 text-slate-300 font-mono">{r.date}</td>
-                          <td className="py-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                              Rit {r.ritNumber || 1}
-                            </span>
-                          </td>
-                          <td className="py-3">
-                            <span className="font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
-                              {r.truckNumber}
-                            </span>
-                          </td>
-                          <td className="py-3 text-slate-200 font-semibold">{r.driverName}</td>
-                          <td className="py-3 text-slate-300">{r.afdeling}</td>
-                          <td className="py-3 text-right">
-                            <span className="font-bold text-emerald-400 font-mono text-sm">
-                              {r.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                              <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
-                            </span>
-                          </td>
-                          <td className="py-3 text-slate-400 text-[11px] max-w-xs truncate">
-                            {r.notes || '-'}
-                          </td>
-                          <td className="py-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => handleOpenEditModal(r)}
-                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition"
-                                title="Edit data"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setRecordToDelete(r)}
-                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/80 text-slate-300 hover:text-rose-400 transition"
-                                title="Hapus data"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       </main>
 
-      {/* MODAL DETAIL PER TANGGAL (CALENDAR DAY DETAILS) */}
+      {/* MODAL DETAIL PER TANGGAL (READ-ONLY — TANPA EDIT / HAPUS) */}
       {selectedDateForDetail && (() => {
-        const dayTrips = records.filter((r) => r.date === selectedDateForDetail);
-        const dayTotalTonnage = dayTrips.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
-        const dayPemuatList = Array.from(new Set(dayTrips.map((r) => r.driverName))).filter(Boolean);
-        const dayTruckList = Array.from(new Set(dayTrips.map((r) => r.truckNumber))).filter(Boolean);
+        const dayStat = dailyStatsMap.get(selectedDateForDetail);
+        const dayTrips = dayStat ? dayStat.trips : [];
+        const dayTotalTonnage = dayStat ? dayStat.totalTonnage : 0;
+        const dayPemuatList = dayStat ? dayStat.pemuatList : [];
+        const dayTruckList = dayStat ? dayStat.truckList : [];
 
-        // Filter pencarian khusus pada Rincian Ritase & Muatan
-        const filteredDayTrips = dayTrips.filter((trip) => {
+        const filteredDayTrips = dayTrips.filter((t) => {
           if (!modalSearchQuery.trim()) return true;
-          const q = modalSearchQuery.toLowerCase().trim();
-          const matchTruck = trip.truckNumber.toLowerCase().includes(q);
-          const matchDriver = trip.driverName.toLowerCase().includes(q);
-          const matchAfd = trip.afdeling.toLowerCase().includes(q);
-          const matchNotes = (trip.notes || '').toLowerCase().includes(q);
-          const matchTon = String(trip.tonnage).includes(q);
-          return matchTruck || matchDriver || matchAfd || matchNotes || matchTon;
+          const q = modalSearchQuery.toLowerCase();
+          return (
+            t.driverName.toLowerCase().includes(q) ||
+            t.truckNumber.toLowerCase().includes(q) ||
+            t.afdeling.toLowerCase().includes(q) ||
+            (t.notes || '').toLowerCase().includes(q)
+          );
         });
-
-        const filteredDayTonnage = filteredDayTrips.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-150">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 border border-slate-700/90 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
               {/* Modal Header */}
-              <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/95 sticky top-0 z-10">
+              <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-950/50 via-slate-900 to-slate-900">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                     <CalendarDays className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-white text-sm sm:text-base">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white">
                       Rincian Muat: {formatDateIndoFull(selectedDateForDetail)}
                     </h3>
-                    <p className="text-xs text-slate-400 font-mono">
-                      {selectedDateForDetail} • {dayTrips.length} Ritase Tercatat
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                      {selectedDateForDetail} &bull; {dayTrips.length} Ritase Tercatat
                     </p>
                   </div>
                 </div>
@@ -1755,94 +1134,69 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     setSelectedDateForDetail(null);
                     setModalSearchQuery('');
                   }}
-                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+                  className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Modal Content Scrollable */}
-              <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
-                {/* 4 Summary Mini Cards */}
+              {/* Modal Body */}
+              <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+                {/* Summary Mini Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-                    <span className="text-[11px] text-slate-400 block">Total Tonase</span>
-                    <strong className="text-emerald-400 font-mono text-base font-black">
-                      {dayTotalTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </strong>
-                    <span className="text-[10px] text-slate-400 ml-1">Ton</span>
+                    <span className="text-[10px] text-slate-400 block">Total Tonase</span>
+                    <span className="text-base sm:text-lg font-black text-emerald-400 font-mono">
+                      {dayTotalTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                      <span className="text-[10px] font-normal text-slate-400">Ton</span>
+                    </span>
                   </div>
-
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-                    <span className="text-[11px] text-slate-400 block">Total Ritase</span>
-                    <strong className="text-white font-mono text-base font-black">{dayTrips.length}</strong>
-                    <span className="text-[10px] text-slate-400 ml-1">Rit</span>
+                    <span className="text-[10px] text-slate-400 block">Total Ritase</span>
+                    <span className="text-base sm:text-lg font-black text-white font-mono">
+                      {dayTrips.length} <span className="text-[10px] font-normal text-slate-400">Rit</span>
+                    </span>
                   </div>
-
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-                    <span className="text-[11px] text-slate-400 block">Pemuat Bertugas</span>
-                    <strong className="text-white font-mono text-base font-black">{dayPemuatList.length}</strong>
-                    <span className="text-[10px] text-slate-400 ml-1">Orang</span>
+                    <span className="text-[10px] text-slate-400 block">Tim Pemuat</span>
+                    <span className="text-base sm:text-lg font-black text-white font-mono">
+                      {dayPemuatList.length} <span className="text-[10px] font-normal text-slate-400">Tim</span>
+                    </span>
                   </div>
-
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-                    <span className="text-[11px] text-slate-400 block">Unit Truk</span>
-                    <strong className="text-white font-mono text-base font-black">{dayTruckList.length}</strong>
-                    <span className="text-[10px] text-slate-400 ml-1">Unit</span>
+                    <span className="text-[10px] text-slate-400 block">Unit Truk</span>
+                    <span className="text-base sm:text-lg font-black text-white font-mono">
+                      {dayTruckList.length} <span className="text-[10px] font-normal text-slate-400">Unit</span>
+                    </span>
                   </div>
                 </div>
 
-                {/* Daftar Pemuat Yang Bertugas */}
-                <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                {/* Daftar Pemuat Bertugas */}
+                {dayPemuatList.length > 0 && (
+                  <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                    <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-emerald-400" />
-                      Daftar Pemuat Bertugas ({dayPemuatList.length})
-                    </h4>
-                    {modalSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setModalSearchQuery('')}
-                        className="text-[11px] text-emerald-400 hover:text-emerald-300 transition cursor-pointer font-medium"
-                      >
-                        Reset Filter
-                      </button>
-                    )}
-                  </div>
-                  {dayPemuatList.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic">Belum ada pemuat yang mencatat ritase pada tanggal ini.</p>
-                  ) : (
+                      <span>Hasil per Pemuat pada Tanggal Ini ({dayPemuatList.length}):</span>
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {dayPemuatList.map((nama) => {
-                        const loaderTrips = dayTrips.filter((r) => r.driverName === nama);
-                        const loaderTon = loaderTrips.reduce((s, r) => s + (Number(r.tonnage) || 0), 0);
-                        const isSelected = modalSearchQuery.toLowerCase().trim() === nama.toLowerCase().trim();
+                        const loaderTrips = dayTrips.filter((t) => t.driverName === nama);
+                        const loaderTons = loaderTrips.reduce((s, t) => s + (Number(t.tonnage) || 0), 0);
                         return (
-                          <button
+                          <div
                             key={nama}
-                            type="button"
-                            onClick={() => {
-                              setModalSearchQuery((prev) =>
-                                prev.toLowerCase().trim() === nama.toLowerCase().trim() ? '' : nama
-                              );
-                            }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-emerald-500/25 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500/50 shadow-sm'
-                                : 'bg-slate-900 border-slate-700/80 text-white hover:border-emerald-500/50'
-                            }`}
-                            title={`Klik untuk memfilter rincian muatan khusus ${nama}`}
+                            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs"
                           >
-                            <span className="font-semibold">{nama}</span>
-                            <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                              {loaderTon.toFixed(2)} T ({loaderTrips.length} Rit)
+                            <span className="font-bold text-white">{nama}</span>
+                            <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              {loaderTons.toFixed(2)} T ({loaderTrips.length} Rit)
                             </span>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Rekap Urutan Ritase per Afdeling pada Tanggal Ini */}
                 {(() => {
@@ -1854,12 +1208,12 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   });
                   if (afdMap.size === 0) return null;
                   return (
-                    <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5" />
                         <span>Urutan Ritase per Afdeling:</span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {Array.from(afdMap.entries())
                           .sort(([a], [b]) => a.localeCompare(b, 'id', { numeric: true }))
                           .map(([afdName, tList]) => {
@@ -1875,7 +1229,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                                   {sortedList.map((t, idx) => (
                                     <span key={t.id} className="text-[10px] px-2 py-1 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono flex items-center justify-between gap-1.5">
                                       <span>
-                                        <strong className="text-sky-400">Rit {idx + 1}:</strong> {t.truckNumber} &bull; <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                        <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong> {t.truckNumber} &bull; <span className="text-emerald-300 font-semibold">{t.driverName}</span>
                                       </span>
                                       <span className="text-white font-bold shrink-0">({t.tonnage}T)</span>
                                     </span>
@@ -1889,28 +1243,15 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   );
                 })()}
 
-                {/* Daftar Rincian Ritase & Muatan Dengan Fitur Pencarian */}
+                {/* Rincian Ritase & Muatan (Hanya Lihat) */}
                 <div className="space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                        <Truck className="w-3.5 h-3.5 text-emerald-400" />
-                        Rincian Ritase & Muatan
-                      </h4>
-                      {modalSearchQuery.trim() && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
-                          Terfilter
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      {modalSearchQuery.trim()
-                        ? `Ditemukan ${filteredDayTrips.length} dari ${dayTrips.length} transaksi (${filteredDayTonnage.toFixed(2)} Ton)`
-                        : `Total ${dayTrips.length} transaksi`}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Rincian Ritase &amp; Muatan ({filteredDayTrips.length})</span>
+                    </h4>
                   </div>
 
-                  {/* Input Fitur Pencarian Rincian Ritase & Muatan */}
                   {dayTrips.length > 0 && (
                     <div className="relative">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1918,119 +1259,42 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                         type="text"
                         value={modalSearchQuery}
                         onChange={(e) => setModalSearchQuery(e.target.value)}
-                        placeholder="Cari nama pemuat, nomor unit truk (DT 90), afdeling, atau catatan..."
-                        className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none transition shadow-inner"
+                        placeholder="Cari nama pemuat, nomor unit truk, atau afdeling..."
+                        className="w-full bg-slate-950 border border-slate-700/80 focus:border-emerald-500 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none transition"
                       />
-                      {modalSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setModalSearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white transition rounded-md cursor-pointer"
-                          title="Hapus kata kunci pencarian"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
                     </div>
                   )}
 
-                  {dayTrips.length === 0 ? (
-                    <div className="text-center py-8 bg-slate-950/50 rounded-xl border border-slate-800/80 text-slate-500 text-xs space-y-2">
-                      <CalendarDays className="w-8 h-8 mx-auto text-slate-600 opacity-50" />
-                      <p className="font-medium text-slate-400">Tidak ada pengiriman tercatat pada {selectedDateForDetail}</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData((prev) => ({ ...prev, date: selectedDateForDetail }));
-                          setSelectedDateForDetail(null);
-                          setModalSearchQuery('');
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                          showToast(`Tanggal form disetel ke ${selectedDateForDetail}`, 'info');
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg font-bold text-xs transition cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Input Pengiriman untuk Tanggal Ini</span>
-                      </button>
-                    </div>
-                  ) : filteredDayTrips.length === 0 ? (
-                    <div className="text-center py-8 bg-slate-950/60 rounded-xl border border-dashed border-slate-800 text-slate-400 text-xs space-y-2">
-                      <Search className="w-8 h-8 mx-auto text-slate-600" />
-                      <p className="font-semibold text-slate-300">
-                        Tidak ada ritase yang cocok dengan pencarian &quot;<span className="text-emerald-400 font-bold">{modalSearchQuery}</span>&quot;
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Periksa kembali nama pemuat, nomor DT, afdeling, atau catatan yang dicari.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setModalSearchQuery('')}
-                        className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs rounded-lg font-medium transition cursor-pointer inline-flex items-center gap-1.5"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Reset Pencarian</span>
-                      </button>
+                  {filteredDayTrips.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-950/50 rounded-xl border border-slate-800/80 text-slate-400 text-xs">
+                      Tidak ada pengiriman tercatat pada tanggal ini.
                     </div>
                   ) : (
                     <div className="space-y-2">
                       {filteredDayTrips.map((trip, idx) => (
                         <div
                           key={trip.id}
-                          className="bg-slate-950 p-3 rounded-xl border border-slate-800 hover:border-slate-700 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-sm"
+                          className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-2.5"
                         >
-                          <div className="flex items-center gap-3">
-                            <span className="text-slate-500 text-xs font-mono w-4">{idx + 1}</span>
-                            <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25 shrink-0">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="text-slate-500 text-xs font-mono w-4">{idx + 1}.</span>
+                            <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
                               {trip.truckNumber}
                             </span>
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
                               Rit {trip.ritNumber || 1}
                             </span>
-                            <div>
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className="font-semibold text-white">{trip.driverName}</span>
-                                <span className="text-slate-500">•</span>
-                                <span className="text-slate-400">{trip.afdeling}</span>
-                              </div>
-                              {trip.notes && (
-                                <p className="text-[11px] text-slate-400 font-mono mt-0.5">{trip.notes}</p>
-                              )}
-                            </div>
+                            <span className="font-bold text-xs text-white">{trip.driverName}</span>
+                            <span className="text-xs text-slate-400">&bull; {trip.afdeling}</span>
+                            {trip.notes && (
+                              <span className="text-[11px] text-slate-400 font-mono">({trip.notes})</span>
+                            )}
                           </div>
 
-                          <div className="flex items-center justify-between sm:justify-end gap-3 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-900">
-                            <span className="text-sm font-black text-emerald-400 font-mono">
-                              {trip.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                              <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
-                            </span>
-
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedDateForDetail(null);
-                                  setModalSearchQuery('');
-                                  handleOpenEditModal(trip);
-                                }}
-                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 transition cursor-pointer"
-                                title="Edit pengiriman"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedDateForDetail(null);
-                                  setModalSearchQuery('');
-                                  setRecordToDelete(trip);
-                                }}
-                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-rose-950/80 text-slate-300 hover:text-rose-400 transition cursor-pointer"
-                                title="Hapus pengiriman"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
+                          <span className="text-sm font-black text-emerald-400 font-mono shrink-0">
+                            {trip.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                            <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -2038,30 +1302,15 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 </div>
               </div>
 
-              {/* Modal Footer Actions */}
-              <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData((prev) => ({ ...prev, date: selectedDateForDetail }));
-                    setSelectedDateForDetail(null);
-                    setModalSearchQuery('');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    showToast(`Tanggal form disetel ke ${selectedDateForDetail}`, 'info');
-                  }}
-                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-emerald-400" />
-                  <span>+ Tambah Muat Tanggal Ini</span>
-                </button>
-
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedDateForDetail(null);
                     setModalSearchQuery('');
                   }}
-                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition cursor-pointer"
                 >
                   Tutup
                 </button>
@@ -2071,225 +1320,62 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         );
       })()}
 
-      {/* EDIT MODAL */}
-      {recordToEdit && editFormData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="font-bold text-white text-sm sm:text-base flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-emerald-400" />
-                Edit Catatan Ritase {editFormData.truckNumber}
-              </h3>
-              <button
-                onClick={() => {
-                  setRecordToEdit(null);
-                  setEditFormData(null);
-                }}
-                className="p-1 rounded-lg text-slate-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {/* MODAL VERIFIKASI PIN ADMIN UNTUK KELUAR DARI PORTAL PEMUAT */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Verifikasi Admin Traksi KPU</h3>
+                <p className="text-xs text-slate-400">Masukkan PIN Admin untuk membuka Beranda Utama.</p>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleVerifyPinAndExit} className="space-y-3">
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Tanggal:</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  PIN Admin
+                </label>
                 <input
-                  type="date"
-                  value={editFormData.date}
-                  onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Nomor Truk:</label>
-                <input
-                  type="text"
-                  value={editFormData.truckNumber}
-                  onChange={(e) => setEditFormData({ ...editFormData, truckNumber: e.target.value })}
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold uppercase focus:outline-none focus:border-emerald-500"
-                />
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {dynamicTruckCodes.map((dt) => (
-                    <button
-                      key={dt}
-                      type="button"
-                      onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
-                      className={`text-[10px] px-2 py-0.5 rounded font-mono border transition cursor-pointer ${
-                        editFormData.truckNumber.toUpperCase() === dt.toUpperCase()
-                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
-                          : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
-                      }`}
-                    >
-                      {dt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Nama Pemuat (Multi-Select) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-300">Nama Pemuat:</label>
-                  {selectedEditPemuatList.length > 0 && (
-                    <span className="text-[10px] text-emerald-300 font-bold font-mono bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">
-                      {selectedEditPemuatList.length} Dipilih
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={editFormData.driverName}
-                  onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
-                  placeholder="Contoh: ANTON/DELFIN/YUVEN"
-                  required
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500 font-bold"
-                />
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {pemuatMaster.map((p) => {
-                    const isSelected = selectedEditPemuatList.includes(p.name.toUpperCase());
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleToggleEditPemuatName(p.name)}
-                        className={`text-[10px] px-2 py-0.5 rounded font-medium transition border flex items-center gap-1 cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400'
-                            : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
-                        }`}
-                      >
-                        {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                        <span>{p.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Nomor Ritase (Rit) & Tonase */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Nomor Ritase (Rit):</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={editFormData.ritNumber || 1}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        ritNumber: parseInt(e.target.value, 10) || 1,
-                      })
-                    }
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sky-400 font-bold font-mono focus:outline-none focus:border-emerald-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-300 mb-1">Tonase (Ton):</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={editFormData.tonnage}
-                    onChange={(e) => handleTonInputChange(e.target.value, true)}
-                    required
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500 text-sm"
-                  />
-                </div>
-              </div>
-              <div className="p-2 bg-slate-950/70 border border-slate-800 rounded-xl space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">Pilih Angka Tonase (1-0):</span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleTonBackspace(true)}
-                      className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 text-[10px] font-bold"
-                    >
-                      ⌫
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditFormData({ ...editFormData, tonnage: '' as any })}
-                      className="px-1.5 py-0.5 rounded bg-rose-950/60 text-rose-300 text-[10px] font-bold"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-5 gap-1">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((digit) => (
-                    <button
-                      key={digit}
-                      type="button"
-                      onClick={() => handleTonDigitPress(digit, true)}
-                      className="py-1 rounded bg-slate-800 hover:bg-emerald-600 text-white font-mono font-bold text-xs border border-slate-700 transition cursor-pointer"
-                    >
-                      {digit}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Afdeling:</label>
-                <select
-                  value={editFormData.afdeling}
+                  type="password"
+                  maxLength={32}
+                  value={pinInput}
                   onChange={(e) => {
-                    const newAfd = e.target.value;
-                    const existingInTargetAfd = records.filter(
-                      (r) =>
-                        r.id !== recordToEdit.id &&
-                        r.date === editFormData.date &&
-                        r.afdeling.trim().toLowerCase() === newAfd.trim().toLowerCase()
-                    );
-                    setEditFormData({
-                      ...editFormData,
-                      afdeling: newAfd,
-                      ritNumber: existingInTargetAfd.length + 1,
-                    });
+                    setPinInput(e.target.value);
+                    setPinError('');
                   }}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                >
-                  {QUICK_AFDELINGS.map((afd) => (
-                    <option key={afd} value={afd}>
-                      {afd}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Catatan:</label>
-                <input
-                  type="text"
-                  value={editFormData.notes || ''}
-                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
-                  placeholder="Catatan tambahan..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
+                  autoFocus
+                  placeholder="Masukkan PIN Admin"
+                  className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-center text-white tracking-widest text-base font-mono focus:border-emerald-500 outline-none"
                 />
+                {pinError && (
+                  <p className="text-xs text-rose-400 font-medium mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {pinError}
+                  </p>
+                )}
               </div>
 
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setRecordToEdit(null);
-                    setEditFormData(null);
+                    setShowPinModal(false);
+                    setPinInput('');
+                    setPinError('');
                   }}
-                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition"
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isUpdating}
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition flex items-center gap-1.5"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg shadow-md cursor-pointer"
                 >
-                  {isUpdating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>Simpan Perubahan</span>
+                  Buka Beranda Utama
                 </button>
               </div>
             </form>
@@ -2297,100 +1383,25 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
-      {recordToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-400">
-              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-white text-sm">Hapus Catatan Pengiriman?</h3>
-                <p className="text-xs text-slate-400">Tindakan ini tidak dapat dibatalkan</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-800">
-              Apakah Anda yakin ingin menghapus catatan pengiriman unit <strong>{recordToDelete.truckNumber}</strong> ({recordToDelete.tonnage} Ton - {recordToDelete.driverName}) dari database?
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setRecordToDelete(null)}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5"
-              >
-                {isDeleting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Hapus Data</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE ALL CONFIRMATION MODAL */}
-      {isDeleteAllModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-400">
-              <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-white text-sm">Hapus Semua Riwayat?</h3>
-                <p className="text-xs text-slate-400">Menghapus seluruh data riwayat input harian</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-800">
-              Apakah Anda yakin ingin menghapus seluruh <strong className="text-rose-400 font-mono">{records.length} data</strong> riwayat pengiriman dari database?
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsDeleteAllModalOpen(false)}
-                disabled={isDeletingAll}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteAll}
-                disabled={isDeletingAll}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-              >
-                {isDeletingAll ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Ya, Hapus Semua ({records.length})</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Pemuat Manager Modal */}
-      <PemuatManagerModal
-        isOpen={isPemuatManagerOpen}
-        onClose={() => setIsPemuatManagerOpen(false)}
-        pemuatList={pemuatMaster}
-        onAddPemuat={addPemuatFirestore}
-        onDeletePemuat={deletePemuatFirestore}
-        onSelectPemuat={(name) => handleTogglePemuatName(name)}
-      />
-
       {/* FOOTER */}
-      <footer className="mt-auto border-t border-slate-900 py-4 text-center text-xs text-slate-500">
-        <p>Portal Lapangan Catatan Harian Truk TBS &bull; Traksi KPU (Kalimantan Plantation Unit)</p>
+      <footer className="mt-auto border-t border-slate-900 py-5 text-center text-xs text-slate-500">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <p>Portal Hasil Pemuat TBS &bull; Traksi KPU (Kalimantan Plantation Unit)</p>
+          {onExitToAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setPinInput('');
+                setPinError('');
+                setShowPinModal(true);
+              }}
+              className="text-slate-400 hover:text-emerald-400 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Masuk sebagai Admin Pengelola</span>
+            </button>
+          )}
+        </div>
       </footer>
     </div>
   );
