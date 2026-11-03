@@ -53,6 +53,8 @@ import {
   INDO_DAYS_HEADER,
   INDO_DAYS_HEADER_SHORT,
   formatDateIndoFull,
+  parsePemuatNames,
+  computeIndividualPemuatBreakdown,
 } from './PemuatPortalView';
 import { getTodayWIB, getDaysAgoWIB, getWIBDateParts } from '../utils/formatters';
 import {
@@ -652,9 +654,11 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       entry.trips.push(r);
       entry.totalTonnage += Number(r.tonnage) || 0;
       entry.tripCount += 1;
-      if (r.driverName && !entry.pemuatList.includes(r.driverName)) {
-        entry.pemuatList.push(r.driverName);
-      }
+      parsePemuatNames(r.driverName).forEach((pName) => {
+        if (!entry.pemuatList.includes(pName)) {
+          entry.pemuatList.push(pName);
+        }
+      });
       if (r.truckNumber && !entry.truckList.includes(r.truckNumber)) {
         entry.truckList.push(r.truckNumber);
       }
@@ -2329,8 +2333,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
         const dayStat = calendarDailyStatsMap.get(selectedCalendarDate);
         const dayTrips = dayStat ? dayStat.trips : [];
         const dayTotalTonnage = dayStat ? dayStat.totalTonnage : 0;
-        const dayPemuatList = dayStat ? dayStat.pemuatList : [];
         const dayTruckList = dayStat ? dayStat.truckList : [];
+        const dayIndividualSummaries = computeIndividualPemuatBreakdown(dayTrips);
 
         const filteredDayTrips = dayTrips.filter((t) => {
           if (!calendarModalSearch.trim()) return true;
@@ -2396,7 +2400,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
                     <span className="text-[10px] text-slate-400 block">Pemuat Bertugas</span>
                     <span className="text-base sm:text-lg font-black text-white font-mono">
-                      {dayPemuatList.length} <span className="text-[10px] font-normal text-slate-400">Orang</span>
+                      {dayIndividualSummaries.length} <span className="text-[10px] font-normal text-slate-400">Orang</span>
                     </span>
                   </div>
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
@@ -2407,29 +2411,25 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   </div>
                 </div>
 
-                {/* Daftar Pemuat Bertugas */}
-                {dayPemuatList.length > 0 && (
+                {/* Daftar Bagi Hasil per Individu Pemuat Bertugas */}
+                {dayIndividualSummaries.length > 0 && (
                   <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
                     <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Daftar Pemuat Bertugas ({dayPemuatList.length})</span>
+                      <span>Bagi Hasil per Individu Pemuat ({dayIndividualSummaries.length} Orang)</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {dayPemuatList.map((nama) => {
-                        const loaderTrips = dayTrips.filter((t) => t.driverName === nama);
-                        const loaderTons = loaderTrips.reduce((s, t) => s + (Number(t.tonnage) || 0), 0);
-                        return (
-                          <div
-                            key={nama}
-                            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs"
-                          >
-                            <span className="font-bold text-white">{nama}</span>
-                            <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                              {loaderTons.toFixed(2)} T ({loaderTrips.length} Rit)
-                            </span>
-                          </div>
-                        );
-                      })}
+                      {dayIndividualSummaries.map((item) => (
+                        <div
+                          key={item.name}
+                          className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs"
+                        >
+                          <span className="font-bold text-white">{item.name}</span>
+                          <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            {item.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T ({item.ritCount} Rit)
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

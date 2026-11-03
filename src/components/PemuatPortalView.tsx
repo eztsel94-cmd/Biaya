@@ -58,6 +58,92 @@ export function formatDateIndoFull(dateStr: string): string {
   return `${dayName}, ${d} ${monthName} ${y}`;
 }
 
+export function parsePemuatNames(driverName: string | undefined | null): string[] {
+  if (!driverName) return [];
+  return String(driverName)
+    .split(/[\/,]/)
+    .map((part) => part.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+export interface PemuatShareInfo {
+  rawTonnage: number;
+  pemuatNames: string[];
+  pemuatCount: number;
+  shareTonnage: number;
+  isShared: boolean;
+  partners: string[];
+}
+
+export function getRecordPemuatShare(
+  record: { driverName?: string; tonnage?: number | string },
+  targetPemuat?: string
+): PemuatShareInfo {
+  const rawTonnage = Number(record.tonnage) || 0;
+  const pemuatNames = parsePemuatNames(record.driverName);
+  const pemuatCount = Math.max(1, pemuatNames.length);
+
+  if (!targetPemuat || !targetPemuat.trim()) {
+    return {
+      rawTonnage,
+      pemuatNames,
+      pemuatCount,
+      shareTonnage: rawTonnage,
+      isShared: pemuatCount > 1,
+      partners: [],
+    };
+  }
+
+  const cleanTarget = targetPemuat.trim().toUpperCase();
+  const partners = pemuatNames.filter((n) => n !== cleanTarget);
+  const shareTonnage = rawTonnage / pemuatCount;
+
+  return {
+    rawTonnage,
+    pemuatNames,
+    pemuatCount,
+    shareTonnage,
+    isShared: pemuatCount > 1,
+    partners,
+  };
+}
+
+export interface IndividualPemuatSummary {
+  name: string;
+  ritCount: number;
+  rawTonnage: number;
+  shareTonnage: number;
+}
+
+export function computeIndividualPemuatBreakdown(recordsList: DailyRecord[]): IndividualPemuatSummary[] {
+  const map = new Map<string, IndividualPemuatSummary>();
+
+  recordsList.forEach((r) => {
+    const names = parsePemuatNames(r.driverName);
+    if (names.length === 0) return;
+    const count = names.length;
+    const rawTon = Number(r.tonnage) || 0;
+    const sharePerPerson = rawTon / count;
+
+    names.forEach((name) => {
+      if (!map.has(name)) {
+        map.set(name, {
+          name,
+          ritCount: 0,
+          rawTonnage: 0,
+          shareTonnage: 0,
+        });
+      }
+      const entry = map.get(name)!;
+      entry.ritCount += 1;
+      entry.rawTonnage += rawTon;
+      entry.shareTonnage += sharePerPerson;
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.shareTonnage - a.shareTonnage);
+}
+
 interface PemuatPortalViewProps {
   trucks?: TruckUnit[];
   initialPemuatName?: string;
@@ -188,12 +274,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     });
     records.forEach((r) => {
       if (r.driverName) {
-        // Tambahkan nama per individu jika dipisah '/'
-        r.driverName
-          .split('/')
-          .map((part) => part.trim().toUpperCase())
-          .filter(Boolean)
-          .forEach((part) => nameSet.add(part));
+        parsePemuatNames(r.driverName).forEach((part) => nameSet.add(part));
       }
     });
     return Array.from(nameSet).sort((a, b) => a.localeCompare(b, 'id'));
@@ -253,12 +334,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       const notesStr = String(r.notes || '');
 
       if (selectedPemuat) {
-        const parts = driverNameStr
-          .split('/')
-          .map((p) => p.trim().toLowerCase());
+        const parts = parsePemuatNames(driverNameStr).map((p) => p.toLowerCase());
         const target = selectedPemuat.trim().toLowerCase();
-        const isMatch =
-          parts.includes(target) || driverNameStr.toLowerCase().includes(target);
+        const isMatch = parts.length > 0 ? parts.includes(target) : driverNameStr.toLowerCase().includes(target);
         if (!isMatch) return false;
       }
       if (filterTruck !== 'ALL' && truckNumberStr.toUpperCase() !== filterTruck.toUpperCase()) {
@@ -293,16 +371,21 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     });
   }, [pemuatFilteredRecords, filterDateRange, todayStr, calendarYear, calendarMonth]);
 
-  // Hasil Hari Ini (WIB)
+  // Hasil Hari Ini (WIB) - Jika pemuat dipilih, hitung bagian bersihnya setelah dibagi jumlah orang di truk
   const todayStats = useMemo(() => {
     const todayList = pemuatFilteredRecords.filter((r) => r.date === todayStr);
-    const ton = todayList.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
+    const shareTon = todayList.reduce(
+      (sum, r) => sum + getRecordPemuatShare(r, selectedPemuat).shareTonnage,
+      0
+    );
+    const rawTon = todayList.reduce((sum, r) => sum + (Number(r.tonnage) || 0), 0);
     return {
       trips: todayList,
-      tonnage: ton,
+      tonnage: shareTon,
+      rawTonnage: rawTon,
       ritCount: todayList.length,
     };
-  }, [pemuatFilteredRecords, todayStr]);
+  }, [pemuatFilteredRecords, todayStr, selectedPemuat]);
 
   // Peta agregat harian untuk kalender (YYYY-MM-DD -> metrik & daftar rit)
   const dailyStatsMap = useMemo(() => {
@@ -310,6 +393,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       date: string;
       trips: DailyRecord[];
       totalTonnage: number;
+      rawTotalTonnage: number;
       tripCount: number;
       pemuatList: string[];
       truckList: string[];
@@ -323,6 +407,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           date: dateKey,
           trips: [],
           totalTonnage: 0,
+          rawTotalTonnage: 0,
           tripCount: 0,
           pemuatList: [],
           truckList: [],
@@ -330,12 +415,16 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         });
       }
       const entry = map.get(dateKey)!;
+      const shareInfo = getRecordPemuatShare(r, selectedPemuat);
       entry.trips.push(r);
-      entry.totalTonnage += Number(r.tonnage) || 0;
+      entry.totalTonnage += shareInfo.shareTonnage;
+      entry.rawTotalTonnage += shareInfo.rawTonnage;
       entry.tripCount += 1;
-      if (r.driverName && !entry.pemuatList.includes(r.driverName)) {
-        entry.pemuatList.push(r.driverName);
-      }
+      shareInfo.pemuatNames.forEach((pName) => {
+        if (!entry.pemuatList.includes(pName)) {
+          entry.pemuatList.push(pName);
+        }
+      });
       if (r.truckNumber && !entry.truckList.includes(r.truckNumber)) {
         entry.truckList.push(r.truckNumber);
       }
@@ -345,18 +434,83 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     });
 
     return map;
-  }, [pemuatFilteredRecords]);
+  }, [pemuatFilteredRecords, selectedPemuat]);
+
+  // Langkah 1 & 2: Rincian Pembagian Tonase per Teman / Tim untuk bulan yang aktif, lalu ditotal khusus untuk pemuat terpilih
+  const monthPartnerBreakdown = useMemo(() => {
+    if (!selectedPemuat) return [];
+    const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    const targetUpper = selectedPemuat.trim().toUpperCase();
+
+    const groupMap = new Map<string, {
+      key: string;
+      teamLabel: string;
+      partnerLabel: string;
+      pemuatCount: number;
+      ritCount: number;
+      rawTeamTonnage: number;
+      pemuatShareTonnage: number;
+      trips: DailyRecord[];
+    }>();
+
+    pemuatFilteredRecords.forEach((r) => {
+      if (!r.date.startsWith(curYearMonth)) return;
+      const share = getRecordPemuatShare(r, selectedPemuat);
+      const count = share.pemuatCount;
+      const partners = share.partners;
+
+      // Urutkan nama rekan agar DELFIN/OBI dan OBI/DELFIN masuk ke grup teman yang sama
+      const sortedPartners = [...partners].sort((a, b) => a.localeCompare(b, 'id'));
+      const groupKey = count === 1 ? 'SOLO' : `TEAM_${count}_${sortedPartners.join('_')}`;
+      const teamLabel = count === 1 ? targetUpper : [targetUpper, ...sortedPartners].join('/');
+      const partnerLabel =
+        count === 1
+          ? `Muat Sendiri (Utuh 1 Orang)`
+          : `Bersama ${sortedPartners.join(' & ')} (Bagi ${count} Orang)`;
+
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, {
+          key: groupKey,
+          teamLabel,
+          partnerLabel,
+          pemuatCount: count,
+          ritCount: 0,
+          rawTeamTonnage: 0,
+          pemuatShareTonnage: 0,
+          trips: [],
+        });
+      }
+      const grp = groupMap.get(groupKey)!;
+      grp.ritCount += 1;
+      grp.rawTeamTonnage += share.rawTonnage;
+      grp.pemuatShareTonnage += share.shareTonnage;
+      grp.trips.push(r);
+    });
+
+    return Array.from(groupMap.values()).sort((a, b) => b.pemuatShareTonnage - a.pemuatShareTonnage);
+  }, [pemuatFilteredRecords, selectedPemuat, calendarYear, calendarMonth]);
+
+  // Rekap tonase bersih seluruh individu pemuat pada bulan aktif (ketika melihat "Semua Pemuat")
+  const monthAllIndividualsBreakdown = useMemo(() => {
+    const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
+    const monthRecords = records.filter((r) => String(r.date || '').startsWith(curYearMonth));
+    return computeIndividualPemuatBreakdown(monthRecords);
+  }, [records, calendarYear, calendarMonth]);
 
   // Metrik ringkasan bulan yang sedang dibuka di kalender
+  // Jika pemuat dipilih, monthTon adalah hasil penjumlahan bagian bersih dari setiap grup teman (Langkah 1 -> Langkah 2)
   const monthMetrics = useMemo(() => {
     const curYearMonth = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`;
     let monthTon = 0;
+    let rawMonthTon = 0;
     let monthRit = 0;
     const activeDays = new Set<string>();
 
     pemuatFilteredRecords.forEach((r) => {
       if (r.date.startsWith(curYearMonth)) {
-        monthTon += Number(r.tonnage) || 0;
+        const share = getRecordPemuatShare(r, selectedPemuat);
+        monthTon += share.shareTonnage;
+        rawMonthTon += share.rawTonnage;
         monthRit += 1;
         activeDays.add(r.date);
       }
@@ -364,11 +518,12 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
     return {
       monthTon,
+      rawMonthTon,
       monthRit,
       activeDaysCount: activeDays.size,
       avgTonPerRit: monthRit > 0 ? monthTon / monthRit : 0,
     };
-  }, [pemuatFilteredRecords, calendarYear, calendarMonth]);
+  }, [pemuatFilteredRecords, calendarYear, calendarMonth, selectedPemuat]);
 
   // Grid sel kalender bulanan (Senin s/d Minggu)
   const calendarCells = useMemo(() => {
@@ -386,6 +541,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       stat?: {
         trips: DailyRecord[];
         totalTonnage: number;
+        rawTotalTonnage: number;
         tripCount: number;
         pemuatList: string[];
         truckList: string[];
@@ -477,16 +633,23 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
       return;
     }
 
-    const rows = targetList.map((r, index) => ({
-      No: index + 1,
-      Tanggal: r.date,
-      Afdeling: r.afdeling,
-      'Urutan Rit': `Rit ${r.ritNumber || 1}`,
-      'Unit Truk': r.truckNumber,
-      'Nama Pemuat': r.driverName,
-      'Tonase (Ton)': r.tonnage,
-      'Catatan / Keterangan': r.notes || '-',
-    }));
+    const rows = targetList.map((r, index) => {
+      const share = getRecordPemuatShare(r, selectedPemuat);
+      return {
+        No: index + 1,
+        Tanggal: r.date,
+        Afdeling: r.afdeling,
+        'Urutan Rit': `Rit ${r.ritNumber || 1}`,
+        'Unit Truk': r.truckNumber,
+        'Tim Pemuat': r.driverName,
+        'Jumlah Pemuat (Orang)': share.pemuatCount,
+        'Tonase Truk Utuh (Ton)': Number(share.rawTonnage.toFixed(2)),
+        ...(selectedPemuat
+          ? { [`Bagian ${selectedPemuat.toUpperCase()} (Ton)`]: Number(share.shareTonnage.toFixed(2)) }
+          : {}),
+        'Catatan / Keterangan': r.notes || '-',
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
@@ -610,7 +773,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-base sm:text-lg font-black text-white">
-                    {selectedPemuat ? `Hasil Muat TBS: ${selectedPemuat}` : 'Rekap Hasil Muat Seluruh Pemuat TBS'}
+                    {selectedPemuat
+                      ? `Hasil Tonase Khusus: ${selectedPemuat.toUpperCase()}`
+                      : 'Rekap Hasil Muat Seluruh Pemuat TBS'}
                   </h1>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-emerald-500/30 font-bold uppercase flex items-center gap-1">
                     <Lock className="w-2.5 h-2.5" />
@@ -618,7 +783,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Pilih nama Anda di bawah ini untuk melihat total tonase, jumlah ritase, dan urutan rit per afdeling secara langsung.
+                  {selectedPemuat
+                    ? `Tonase dihitung khusus bagian ${selectedPemuat.toUpperCase()} (otomatis dibagi 2 jika berdua, dibagi 3 jika bertiga, dst. lalu dijumlahkan).`
+                    : 'Pilih nama pemuat di bawah ini untuk melihat perhitungan bagi hasil tonase khusus per individu.'}
                 </p>
               </div>
             </div>
@@ -631,7 +798,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           {/* Pilihan Cepat Nama Pemuat */}
           <div className="space-y-2">
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Pilih Nama Pemuat untuk Melihat Hasil:
+              Pilih Nama Pemuat untuk Melihat Hasil Bagian Individu:
             </label>
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -675,7 +842,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           </div>
         )}
 
-        {/* 3 KARTU RINGKASAN HASIL MUAT (SEDERHANA & MUDAH DIPAHAMI) */}
+        {/* 3 KARTU RINGKASAN HASIL MUAT (MENAMPILKAN BAGIAN BERSIH KHUSUS PEMUAT JIKA DIPILIH) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
           {/* 1. Hasil Hari Ini */}
           <div
@@ -684,7 +851,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           >
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Hasil Muat Hari Ini
+                {selectedPemuat ? `Hasil ${selectedPemuat.toUpperCase()} Hari Ini` : 'Hasil Muat Hari Ini'}
               </span>
               <Calendar className="w-4 h-4 text-emerald-400" />
             </div>
@@ -695,7 +862,11 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
               <span className="text-xs sm:text-sm font-bold text-emerald-400">Ton</span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-              <span>Jumlah Pengiriman:</span>
+              <span>
+                {selectedPemuat && todayStats.rawTonnage !== todayStats.tonnage
+                  ? `Total Truk: ${todayStats.rawTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T`
+                  : 'Jumlah Pengiriman:'}
+              </span>
               <strong className="text-emerald-300 font-mono">{todayStats.ritCount} Rit</strong>
             </div>
           </div>
@@ -704,7 +875,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-sky-400">
-                Total Tonase ({INDO_MONTHS[calendarMonth]})
+                {selectedPemuat
+                  ? `Total Bagian ${selectedPemuat.toUpperCase()} (${INDO_MONTHS[calendarMonth]})`
+                  : `Total Tonase (${INDO_MONTHS[calendarMonth]})`}
               </span>
               <Scale className="w-4 h-4 text-sky-400" />
             </div>
@@ -715,7 +888,11 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
               <span className="text-xs sm:text-sm font-bold text-sky-400">Ton</span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
-              <span>Hari Kerja Aktif:</span>
+              <span>
+                {selectedPemuat && monthMetrics.rawMonthTon !== monthMetrics.monthTon
+                  ? `Dari Total Truk: ${monthMetrics.rawMonthTon.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T`
+                  : 'Hari Kerja Aktif:'}
+              </span>
               <strong className="text-white font-mono">{monthMetrics.activeDaysCount} Hari</strong>
             </div>
           </div>
@@ -735,13 +912,133 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
               <span className="text-xs sm:text-sm font-bold text-amber-400">Rit</span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
-              <span>Rata-rata per Rit:</span>
+              <span>{selectedPemuat ? `Rerata Bagian/Rit:` : `Rata-rata per Rit:`}</span>
               <strong className="text-white font-mono">
                 {monthMetrics.avgTonPerRit.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T/Rit
               </strong>
             </div>
           </div>
         </div>
+
+        {/* RINCIAN PEMBAGIAN TONASE PER TEMAN / TIM (KHUSUS PEMUAT TERPILIH) */}
+        {selectedPemuat && monthPartnerBreakdown.length > 0 && (
+          <div className="bg-slate-900/95 border border-emerald-500/35 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Scale className="w-4 h-4 text-emerald-400" />
+                  <h2 className="text-xs sm:text-sm font-extrabold text-white uppercase tracking-wide">
+                    Rincian Bagi Hasil Tonase {selectedPemuat.toUpperCase()} per Teman ({INDO_MONTHS[calendarMonth]} {calendarYear})
+                  </h2>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Tonase dibagikan terlebih dahulu sesuai jumlah teman satu truk (bagi 2, bagi 3, dst.), kemudian dijumlahkan khusus untuk <strong className="text-emerald-300">{selectedPemuat.toUpperCase()}</strong>.
+                </p>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs font-mono shrink-0 self-start sm:self-center">
+                <span className="text-slate-300">Total Khusus {selectedPemuat.toUpperCase()}: </span>
+                <strong className="text-emerald-300 font-black text-sm">
+                  {monthMetrics.monthTon.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Ton
+                </strong>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {monthPartnerBreakdown.map((grp) => (
+                <div
+                  key={grp.key}
+                  className="bg-slate-950 border border-slate-800 hover:border-emerald-500/40 rounded-xl p-3 space-y-2 transition"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-mono font-black text-xs sm:text-sm text-white block truncate">
+                        {grp.teamLabel}
+                      </span>
+                      <span className="text-[11px] text-slate-400 block">
+                        {grp.partnerLabel} &bull; <strong className="text-slate-200">{grp.ritCount} Rit</strong>
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0">
+                      Bagi {grp.pemuatCount}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-900 flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">
+                      Total Tim:{' '}
+                      <strong className="text-slate-200">
+                        {grp.rawTeamTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T
+                      </strong>{' '}
+                      &divide; {grp.pemuatCount}
+                    </span>
+                    <span className="text-emerald-400 font-black text-xs sm:text-sm bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                      = {grp.pemuatShareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Ton
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Baris Total Penjumlahan Bagian Individu */}
+            <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+              <div className="text-slate-300">
+                <span className="font-bold text-emerald-300 uppercase">Total Bagian {selectedPemuat.toUpperCase()}: </span>
+                <span>
+                  {monthPartnerBreakdown
+                    .map((g) => g.pemuatShareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                    .join(' + ')}
+                </span>
+              </div>
+              <div className="text-sm sm:text-base font-black text-emerald-400 shrink-0">
+                = {monthMetrics.monthTon.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Ton
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* REKAP TONASE BERSIH PER INDIVIDU PEMUAT (TAMPIL SAAT "SEMUA PEMUAT" AKTIF) */}
+        {!selectedPemuat && monthAllIndividualsBreakdown.length > 0 && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-800">
+              <div>
+                <h2 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <User className="w-4 h-4 text-emerald-400" />
+                  <span>Rekap Tonase Bersih per Individu Pemuat ({INDO_MONTHS[calendarMonth]} {calendarYear})</span>
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Tonase setiap pemuat sudah otomatis dibagi sesuai jumlah teman se-truk. Ketuk nama untuk melihat rincian per teman.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {monthAllIndividualsBreakdown.map((item) => (
+                <button
+                  key={item.name}
+                  type="button"
+                  onClick={() => handleSelectPemuat(item.name)}
+                  className="bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/40 rounded-xl p-2.5 text-left transition cursor-pointer group"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold text-xs text-white group-hover:text-emerald-300 truncate">
+                      {item.name}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 shrink-0">{item.ritCount} Rit</span>
+                  </div>
+                  <div className="mt-1 font-mono font-black text-sm text-emerald-400">
+                    {item.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                    <span className="text-[10px] font-normal text-emerald-400/80">Ton</span>
+                  </div>
+                  {item.rawTonnage !== item.shareTonnage && (
+                    <div className="text-[9px] font-mono text-slate-500 mt-0.5">
+                      Total truk: {item.rawTonnage.toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} T
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* REKAP URUTAN RITASE PER AFDELING HARI INI (Jika Ada Muatan Hari Ini) */}
         {todayStats.trips.length > 0 && (
@@ -752,7 +1049,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 <span>Urutan Ritase per Afdeling Hari Ini ({formatDateIndoFull(todayStr)})</span>
               </div>
               <span className="text-xs font-mono text-emerald-400 font-bold">
-                Total Hari Ini: {todayStats.ritCount} Rit ({todayStats.tonnage.toFixed(2)} Ton)
+                Total Hari Ini: {todayStats.ritCount} Rit ({todayStats.tonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Ton)
               </span>
             </div>
 
@@ -767,30 +1064,43 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 return Array.from(afdMap.entries())
                   .sort(([a], [b]) => a.localeCompare(b, 'id', { numeric: true }))
                   .map(([afdName, tList]) => {
-                    const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
+                    const totalTons = tList.reduce(
+                      (s, x) => s + getRecordPemuatShare(x, selectedPemuat).shareTonnage,
+                      0
+                    );
                     const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
                     return (
                       <div key={afdName} className="bg-slate-950 border border-slate-800 p-3 rounded-xl text-xs space-y-2">
                         <div className="flex items-center justify-between gap-2 font-bold text-white pb-1.5 border-b border-slate-800/80">
                           <span>{afdName}</span>
                           <span className="text-emerald-400 font-mono text-[11px]">
-                            {tList.length} Rit ({totalTons.toFixed(2)}T)
+                            {tList.length} Rit ({totalTons.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}T)
                           </span>
                         </div>
                         <div className="flex flex-col gap-1">
-                          {sortedList.map((t, idx) => (
-                            <div
-                              key={t.id}
-                              className="text-[11px] px-2 py-1 rounded-lg bg-slate-900 border border-slate-800/90 font-mono flex items-center justify-between gap-1.5"
-                            >
-                              <span className="truncate">
-                                <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong>{' '}
-                                <span className="text-white font-bold">{t.truckNumber}</span> &bull;{' '}
-                                <span className="text-emerald-300 font-semibold">{t.driverName}</span>
-                              </span>
-                              <span className="text-emerald-400 font-bold shrink-0">{t.tonnage}T</span>
-                            </div>
-                          ))}
+                          {sortedList.map((t, idx) => {
+                            const share = getRecordPemuatShare(t, selectedPemuat);
+                            return (
+                              <div
+                                key={t.id}
+                                className="text-[11px] px-2 py-1 rounded-lg bg-slate-900 border border-slate-800/90 font-mono flex items-center justify-between gap-1.5"
+                              >
+                                <span className="truncate">
+                                  <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong>{' '}
+                                  <span className="text-white font-bold">{t.truckNumber}</span> &bull;{' '}
+                                  <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                </span>
+                                <span className="text-emerald-400 font-bold shrink-0">
+                                  {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}T
+                                  {selectedPemuat && share.isShared && (
+                                    <span className="text-[9px] text-slate-400 ml-0.5">
+                                      ({share.rawTonnage}÷{share.pemuatCount})
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -891,7 +1201,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 {/* Ringkasan Bulan */}
                 <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
                   <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
-                    <span className="text-slate-400">Total Muat: </span>
+                    <span className="text-slate-400">
+                      {selectedPemuat ? `Bagian ${selectedPemuat.toUpperCase()}: ` : 'Total Muat: '}
+                    </span>
                     <strong className="text-emerald-400 font-mono">
                       {monthMetrics.monthTon.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Ton
                     </strong>
@@ -1060,39 +1372,52 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {tableFilteredRecords.map((r, idx) => (
-                    <div
-                      key={r.id}
-                      className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                    >
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-slate-500 text-xs font-mono w-5">{idx + 1}.</span>
-                        <span className="font-mono text-xs text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                          {r.date}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                          Rit {r.ritNumber || 1}
-                        </span>
-                        <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
-                          {r.truckNumber}
-                        </span>
-                        <span className="text-xs font-bold text-white">{r.driverName}</span>
-                        <span className="text-xs text-slate-400">&bull; {r.afdeling}</span>
-                        {r.notes && (
-                          <span className="text-[11px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded">
-                            ({r.notes})
+                  {tableFilteredRecords.map((r, idx) => {
+                    const share = getRecordPemuatShare(r, selectedPemuat);
+                    return (
+                      <div
+                        key={r.id}
+                        className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                      >
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="text-slate-500 text-xs font-mono w-5">{idx + 1}.</span>
+                          <span className="font-mono text-xs text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            {r.date}
                           </span>
-                        )}
-                      </div>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                            Rit {r.ritNumber || 1}
+                          </span>
+                          <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
+                            {r.truckNumber}
+                          </span>
+                          <span className="text-xs font-bold text-white">{r.driverName}</span>
+                          {share.isShared && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 border border-amber-500/30">
+                              Bagi {share.pemuatCount} Orang
+                            </span>
+                          )}
+                          <span className="text-xs text-slate-400">&bull; {r.afdeling}</span>
+                          {r.notes && (
+                            <span className="text-[11px] text-slate-400 font-mono bg-slate-900 px-2 py-0.5 rounded">
+                              ({r.notes})
+                            </span>
+                          )}
+                        </div>
 
-                      <div className="text-right sm:shrink-0 border-t sm:border-t-0 border-slate-900 pt-1.5 sm:pt-0">
-                        <span className="text-base font-black text-emerald-400 font-mono">
-                          {(Number(r.tonnage) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                          <span className="text-xs font-semibold text-emerald-400/80">Ton</span>
-                        </span>
+                        <div className="text-right sm:shrink-0 border-t sm:border-t-0 border-slate-900 pt-1.5 sm:pt-0">
+                          <span className="text-base font-black text-emerald-400 font-mono block">
+                            {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                            <span className="text-xs font-semibold text-emerald-400/80">Ton</span>
+                          </span>
+                          {selectedPemuat && share.isShared && (
+                            <span className="text-[10px] font-mono text-slate-400 block">
+                              Total Truk: {share.rawTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T &divide; {share.pemuatCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1105,8 +1430,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
         const dayStat = dailyStatsMap.get(selectedDateForDetail);
         const dayTrips = dayStat ? dayStat.trips : [];
         const dayTotalTonnage = dayStat ? dayStat.totalTonnage : 0;
-        const dayPemuatList = dayStat ? dayStat.pemuatList : [];
+        const dayRawTotalTonnage = dayStat ? dayStat.rawTotalTonnage : 0;
         const dayTruckList = dayStat ? dayStat.truckList : [];
+        const dayIndividualSummaries = computeIndividualPemuatBreakdown(dayTrips);
 
         const filteredDayTrips = dayTrips.filter((t) => {
           if (!modalSearchQuery.trim()) return true;
@@ -1134,6 +1460,7 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     </h3>
                     <p className="text-xs text-slate-400 font-mono mt-0.5">
                       {selectedDateForDetail} &bull; {dayTrips.length} Ritase Tercatat
+                      {selectedPemuat ? ` (Khusus Bagian ${selectedPemuat.toUpperCase()})` : ''}
                     </p>
                   </div>
                 </div>
@@ -1154,11 +1481,18 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                 {/* Summary Mini Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-                    <span className="text-[10px] text-slate-400 block">Total Tonase</span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {selectedPemuat ? `Bagian ${selectedPemuat.toUpperCase()}` : 'Total Tonase'}
+                    </span>
                     <span className="text-base sm:text-lg font-black text-emerald-400 font-mono">
                       {dayTotalTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                       <span className="text-[10px] font-normal text-slate-400">Ton</span>
                     </span>
+                    {selectedPemuat && dayRawTotalTonnage !== dayTotalTonnage && (
+                      <span className="text-[9px] text-slate-500 font-mono block">
+                        Truk: {dayRawTotalTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T
+                      </span>
+                    )}
                   </div>
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
                     <span className="text-[10px] text-slate-400 block">Total Ritase</span>
@@ -1167,9 +1501,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     </span>
                   </div>
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
-                    <span className="text-[10px] text-slate-400 block">Tim Pemuat</span>
+                    <span className="text-[10px] text-slate-400 block">Individu Pemuat</span>
                     <span className="text-base sm:text-lg font-black text-white font-mono">
-                      {dayPemuatList.length} <span className="text-[10px] font-normal text-slate-400">Tim</span>
+                      {dayIndividualSummaries.length} <span className="text-[10px] font-normal text-slate-400">Orang</span>
                     </span>
                   </div>
                   <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
@@ -1180,25 +1514,28 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                   </div>
                 </div>
 
-                {/* Daftar Pemuat Bertugas */}
-                {dayPemuatList.length > 0 && (
+                {/* Daftar Bagi Hasil per Individu Pemuat Bertugas */}
+                {dayIndividualSummaries.length > 0 && (
                   <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2">
                     <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Hasil per Pemuat pada Tanggal Ini ({dayPemuatList.length}):</span>
+                      <span>Bagi Hasil per Individu Pemuat ({dayIndividualSummaries.length} Orang):</span>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {dayPemuatList.map((nama) => {
-                        const loaderTrips = dayTrips.filter((t) => t.driverName === nama);
-                        const loaderTons = loaderTrips.reduce((s, t) => s + (Number(t.tonnage) || 0), 0);
+                      {dayIndividualSummaries.map((item) => {
+                        const isTarget = selectedPemuat && item.name.toUpperCase() === selectedPemuat.toUpperCase();
                         return (
                           <div
-                            key={nama}
-                            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs"
+                            key={item.name}
+                            className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-lg border text-xs ${
+                              isTarget
+                                ? 'bg-emerald-950/70 border-emerald-500/60 text-white'
+                                : 'bg-slate-900 border-slate-700 text-slate-200'
+                            }`}
                           >
-                            <span className="font-bold text-white">{nama}</span>
+                            <span className="font-bold text-white">{item.name}</span>
                             <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                              {loaderTons.toFixed(2)} T ({loaderTrips.length} Rit)
+                              {item.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T ({item.ritCount} Rit)
                             </span>
                           </div>
                         );
@@ -1226,23 +1563,38 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                         {Array.from(afdMap.entries())
                           .sort(([a], [b]) => a.localeCompare(b, 'id', { numeric: true }))
                           .map(([afdName, tList]) => {
-                            const totalTons = tList.reduce((s, x) => s + (Number(x.tonnage) || 0), 0);
+                            const totalTons = tList.reduce(
+                              (s, x) => s + getRecordPemuatShare(x, selectedPemuat).shareTonnage,
+                              0
+                            );
                             const sortedList = [...tList].sort((a, b) => (a.ritNumber || 0) - (b.ritNumber || 0));
                             return (
                               <div key={afdName} className="bg-slate-900 border border-slate-800 p-2.5 rounded-lg text-xs space-y-1.5">
                                 <div className="flex items-center justify-between gap-2 font-bold text-slate-200">
                                   <span>{afdName}</span>
-                                  <span className="text-emerald-400 font-mono text-[11px]">{tList.length} Rit ({totalTons.toFixed(2)}T)</span>
+                                  <span className="text-emerald-400 font-mono text-[11px]">
+                                    {tList.length} Rit ({totalTons.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}T)
+                                  </span>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                  {sortedList.map((t, idx) => (
-                                    <span key={t.id} className="text-[10px] px-2 py-1 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono flex items-center justify-between gap-1.5">
-                                      <span>
-                                        <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong> {t.truckNumber} &bull; <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                  {sortedList.map((t, idx) => {
+                                    const share = getRecordPemuatShare(t, selectedPemuat);
+                                    return (
+                                      <span key={t.id} className="text-[10px] px-2 py-1 rounded bg-slate-950 border border-slate-800 text-sky-300 font-mono flex items-center justify-between gap-1.5">
+                                        <span>
+                                          <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong> {t.truckNumber} &bull; <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                        </span>
+                                        <span className="text-white font-bold shrink-0">
+                                          {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}T
+                                          {selectedPemuat && share.isShared && (
+                                            <span className="text-[9px] text-slate-400 ml-0.5">
+                                              ({share.rawTonnage}÷{share.pemuatCount})
+                                            </span>
+                                          )}
+                                        </span>
                                       </span>
-                                      <span className="text-white font-bold shrink-0">({Number(t.tonnage) || 0}T)</span>
-                                    </span>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
@@ -1280,32 +1632,47 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {filteredDayTrips.map((trip, idx) => (
-                        <div
-                          key={trip.id}
-                          className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-2.5"
-                        >
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="text-slate-500 text-xs font-mono w-4">{idx + 1}.</span>
-                            <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
-                              {trip.truckNumber}
-                            </span>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                              Rit {trip.ritNumber || 1}
-                            </span>
-                            <span className="font-bold text-xs text-white">{trip.driverName}</span>
-                            <span className="text-xs text-slate-400">&bull; {trip.afdeling}</span>
-                            {trip.notes && (
-                              <span className="text-[11px] text-slate-400 font-mono">({trip.notes})</span>
-                            )}
-                          </div>
+                      {filteredDayTrips.map((trip, idx) => {
+                        const share = getRecordPemuatShare(trip, selectedPemuat);
+                        return (
+                          <div
+                            key={trip.id}
+                            className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-2.5"
+                          >
+                            <div className="flex items-center gap-2.5 flex-wrap">
+                              <span className="text-slate-500 text-xs font-mono w-4">{idx + 1}.</span>
+                              <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
+                                {trip.truckNumber}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                Rit {trip.ritNumber || 1}
+                              </span>
+                              <span className="font-bold text-xs text-white">{trip.driverName}</span>
+                              {share.isShared && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 border border-amber-500/30">
+                                  Bagi {share.pemuatCount}
+                                </span>
+                              )}
+                              <span className="text-xs text-slate-400">&bull; {trip.afdeling}</span>
+                              {trip.notes && (
+                                <span className="text-[11px] text-slate-400 font-mono">({trip.notes})</span>
+                              )}
+                            </div>
 
-                          <span className="text-sm font-black text-emerald-400 font-mono shrink-0">
-                            {(Number(trip.tonnage) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                            <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
-                          </span>
-                        </div>
-                      ))}
+                            <div className="text-right shrink-0">
+                              <span className="text-sm font-black text-emerald-400 font-mono block">
+                                {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
+                              </span>
+                              {selectedPemuat && share.isShared && (
+                                <span className="text-[10px] font-mono text-slate-400 block">
+                                  ({share.rawTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T &divide; {share.pemuatCount})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
