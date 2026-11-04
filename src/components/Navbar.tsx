@@ -244,13 +244,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
-              {currentUser.role !== 'viewer' && (
+              {onLogout && (
                 <button
-                  onClick={onOpenAddExpense}
-                  title="Catat Biaya"
-                  className="flex items-center justify-center p-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20"
+                  type="button"
+                  onClick={onLogout}
+                  title="Keluar / Kunci Akses Web"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 text-[11px] font-bold shadow-sm cursor-pointer"
                 >
-                  <PlusCircle className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Keluar</span>
                 </button>
               )}
 

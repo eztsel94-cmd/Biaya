@@ -51,18 +51,23 @@ import {
   LogIn,
 } from 'lucide-react';
 
-const WEB_AUTH_STORAGE_KEY = 'traksi_kpu_web_login_v1';
+const WEB_AUTH_STORAGE_KEY = 'traksi_kpu_web_auth_v2';
+
+// Bersihkan token lama dari localStorage agar pengguna langsung disajikan layar login
+try {
+  localStorage.removeItem('traksi_kpu_web_login_v1');
+  sessionStorage.removeItem('traksi_kpu_web_login_v1');
+  localStorage.removeItem(WEB_AUTH_STORAGE_KEY);
+} catch {}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTabType>('daily_records');
 
   // State Login Utama Web (User: TRAKSIKSR, Password: TRAKSI_001)
+  // Dimulai dari false kecuali sudah login pada sesi aktif saat ini
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return (
-        sessionStorage.getItem(WEB_AUTH_STORAGE_KEY) === 'TRAKSIKSR' ||
-        localStorage.getItem(WEB_AUTH_STORAGE_KEY) === 'TRAKSIKSR'
-      );
+      return sessionStorage.getItem(WEB_AUTH_STORAGE_KEY) === 'TRAKSIKSR';
     } catch {
       return false;
     }
@@ -360,13 +365,13 @@ export default function App() {
     safeUpdateBrowserUrl(queryStr);
   };
 
-  // Helper untuk keluar dari portal pemuat (setelah verifikasi PIN Admin TRAKSI_001) menuju Beranda Utama
+  // Helper untuk keluar dari portal pemuat menuju Beranda Utama Admin
   const handleExitPemuatPortal = () => {
     try {
-      sessionStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
-      localStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
+      sessionStorage.removeItem(WEB_AUTH_STORAGE_KEY);
+      localStorage.removeItem(WEB_AUTH_STORAGE_KEY);
     } catch {}
-    setIsAuthenticated(true);
+    setIsAuthenticated(false);
     safeUpdateBrowserUrl('/');
     setIsPemuatPortalMode(false);
     setActiveTab('daily_records');
@@ -380,13 +385,12 @@ export default function App() {
     if (cleanUser === 'TRAKSIKSR' && cleanPass === 'TRAKSI_001') {
       try {
         sessionStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
-        localStorage.setItem(WEB_AUTH_STORAGE_KEY, 'TRAKSIKSR');
       } catch {}
       setIsAuthenticated(true);
       setLoginError(null);
       setLoginPassword('');
     } else {
-      setLoginError('User atau Password yang dimasukkan tidak sesuai.');
+      setLoginError('User atau Password tidak sesuai. Silakan periksa kembali.');
     }
   };
 
@@ -394,11 +398,13 @@ export default function App() {
     try {
       sessionStorage.removeItem(WEB_AUTH_STORAGE_KEY);
       localStorage.removeItem(WEB_AUTH_STORAGE_KEY);
+      localStorage.removeItem('traksi_kpu_web_login_v1');
     } catch {}
     setIsAuthenticated(false);
     setLoginUsername('');
     setLoginPassword('');
     setLoginError(null);
+    safeUpdateBrowserUrl('/');
   };
 
   // Helper untuk membuka portal supir dan memperbarui URL tanpa reload
@@ -688,6 +694,17 @@ export default function App() {
               <LogIn className="w-4 h-4" />
               <span>Masuk ke Sistem Traksi KPU</span>
             </button>
+
+            {/* Link Akses Khusus Portal Pemuat (Hanya Lihat) */}
+            <div className="pt-3 border-t border-slate-800 text-center">
+              <button
+                type="button"
+                onClick={() => handleEnterPemuatPortal()}
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold underline transition cursor-pointer"
+              >
+                Buka Portal Hasil Pemuat TBS (Mode Hanya Lihat) &rarr;
+              </button>
+            </div>
           </form>
         </div>
       </div>
