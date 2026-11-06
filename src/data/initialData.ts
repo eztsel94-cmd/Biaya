@@ -1,5 +1,12 @@
 import { TruckUnit, ExpenseRecord } from '../types/truck';
 
+// Data armada standar Traksi KPU (18 unit DT & GD)
+export const DEFAULT_TRAKSI_TRUCKS: string[] = [
+  'DT 38', 'DT 41', 'DT 43', 'DT 44', 'DT 47', 'DT 48',
+  'DT 49', 'DT 52', 'DT 56', 'DT 57', 'DT 60', 'DT 62',
+  'DT 63', 'DT 90', 'DT 91', 'DT 92', 'GD 01', 'GD 04',
+];
+
 // Data awal dikosongkan sepenuhnya (tanpa data contoh) agar hanya memuat data riil dari pengguna
 export const INITIAL_TRUCKS: TruckUnit[] = [];
 

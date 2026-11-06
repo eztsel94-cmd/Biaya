@@ -63,7 +63,8 @@ import {
   copyTextToClipboard,
 } from '../utils/driverLink';
 
-const QUICK_TRUCKS: string[] = [];
+import { DEFAULT_TRAKSI_TRUCKS } from '../data/initialData';
+
 const QUICK_AFDELINGS = ['Afdeling 1', 'Afdeling 2', 'Afdeling 3', 'Afdeling 4', 'Divisi Inti', 'Plasma'];
 
 interface DailyRecordsViewProps {
@@ -83,12 +84,22 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
   const [pemuatMaster, setPemuatMaster] = useState<Array<{ id: string; name: string }>>([]);
   const [isPemuatManagerOpen, setIsPemuatManagerOpen] = useState(false);
 
-  // Dynamic Truck Unit Sesuai yang Terdata di Armada
+  // Unit Truk Tersedia di Form Input Data Harian:
+  // Mengikuti unit yang terdaftar dan tersedia di data Armada (status bukan 'Perawatan')
   const dynamicTruckCodes = useMemo(() => {
     if (trucks && trucks.length > 0) {
-      return trucks.map((t) => t.code);
+      // Filter unit armada yang berstatus tersedia (Aktif atau Standby, kecualikan yang Perawatan)
+      const availableUnits = trucks.filter((t) => t.status !== 'Perawatan');
+      const targetUnits = availableUnits.length > 0 ? availableUnits : trucks;
+      const codes = targetUnits
+        .map((t) => (t.code || '').trim().toUpperCase())
+        .filter(Boolean);
+      return Array.from(new Set(codes)).sort((a, b) =>
+        a.localeCompare(b, 'id', { numeric: true })
+      );
     }
-    return QUICK_TRUCKS;
+    // Jika data armada belum diinput di database, fallback ke unit armada standar Traksi KPU
+    return DEFAULT_TRAKSI_TRUCKS;
   }, [trucks]);
 
   // Berlangganan Master Nama Pemuat dari Firestore
@@ -103,7 +114,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
   const [todayStr, setTodayStr] = useState<string>(() => getTodayWIB());
   const [formData, setFormData] = useState<NewDailyRecord>(() => ({
     date: getTodayWIB(),
-    truckNumber: trucks.length > 0 ? trucks[0].code : '',
+    truckNumber: 'DT 90',
     driverName: '',
     tonnage: '' as any,
     afdeling: 'Afdeling 1',
@@ -143,12 +154,18 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
     };
   }, []);
 
-  // Sinkronkan pilihan awal Nomor Unit Truk dengan Armada yang terdata
+  // Sinkronkan pilihan otomatis Nomor Unit Truk (otomatis pilih DT 90 jika tersedia, atau unit pertama yang tersedia)
   useEffect(() => {
     if (dynamicTruckCodes.length > 0) {
       setFormData((prev) => {
-        if (!prev.truckNumber || (!dynamicTruckCodes.includes(prev.truckNumber) && prev.truckNumber === 'DT 90')) {
-          return { ...prev, truckNumber: dynamicTruckCodes[0] };
+        const isCurrentValid = prev.truckNumber && dynamicTruckCodes.some(
+          (code) => code.toUpperCase() === prev.truckNumber.trim().toUpperCase()
+        );
+        if (!isCurrentValid) {
+          return {
+            ...prev,
+            truckNumber: dynamicTruckCodes.includes('DT 90') ? 'DT 90' : dynamicTruckCodes[0],
+          };
         }
         return prev;
       });
@@ -322,13 +339,14 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast('Mohon masukkan Nomor Unit Truk (contoh: DT 90)', 'error');
       return;
     }
-    if (!formData.driverName.trim()) {
-      showToast('Mohon pilih atau masukkan Nama Pemuat (bisa lebih dari satu, contoh: ANTON/DELFIN/YUVEN)', 'error');
-      return;
-    }
+    // Nama pemuat bersifat opsional (bisa disimpan walaupun tanpa nama pemuat)
+    const cleanDriver = (formData.driverName || '').trim().toUpperCase();
+
+    // Tonase bersifat opsional: jika tidak diisi, biarkan kosong (null), jangan diisi angka 0
     const rawTonStr = String(formData.tonnage ?? '').trim().replace(',', '.');
-    const ton = rawTonStr === '' ? 0 : parseFloat(rawTonStr);
-    if (isNaN(ton) || ton < 0) {
+    const hasTonnage = rawTonStr !== '';
+    const parsedTon = hasTonnage ? parseFloat(rawTonStr) : null;
+    if (hasTonnage && (isNaN(parsedTon as number) || (parsedTon as number) < 0)) {
       showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79) atau kosongkan', 'error');
       return;
     }
@@ -338,17 +356,18 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       await addDailyRecord({
         date: formData.date || todayStr,
         truckNumber: formData.truckNumber.trim().toUpperCase(),
-        driverName: formData.driverName.trim().toUpperCase(),
-        tonnage: ton,
+        driverName: cleanDriver,
+        tonnage: parsedTon,
         afdeling: formData.afdeling.trim() || 'Afdeling 1',
         ritNumber: nextRitNumber,
         notes: (formData.notes || '').trim(),
       });
 
-      const tonLabel = ton > 0 ? `${ton} Ton` : 'Tanpa Tonase / 0 Ton';
-      showToast(`Data pengiriman ${formData.truckNumber} - Rit ${nextRitNumber} (${formData.afdeling}, ${tonLabel}) berhasil tersimpan ke Firestore!`, 'success');
+      const tonLabel = parsedTon !== null && parsedTon > 0 ? `${parsedTon} Ton` : 'Tanpa Tonase (Kosong)';
+      const pemuatLabel = cleanDriver ? ` • ${cleanDriver}` : '';
+      showToast(`Data pengiriman ${formData.truckNumber} - Rit ${nextRitNumber} (${formData.afdeling}${pemuatLabel}, ${tonLabel}) berhasil tersimpan ke Firestore!`, 'success');
 
-      // Reset form tapi pertahankan tanggal dan afdeling untuk memudahkan input berulang
+      // Reset form tapi pertahankan tanggal, nomor unit, dan afdeling untuk memudahkan input berulang
       setFormData((prev) => ({
         ...prev,
         driverName: '',
@@ -366,7 +385,13 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
   // Buka Modal Edit
   const handleOpenEditModal = (record: DailyRecord) => {
     setRecordToEdit(record);
-    setEditFormData({ ...record });
+    setEditFormData({
+      ...record,
+      driverName: record.driverName || '',
+      tonnage: record.tonnage !== null && record.tonnage !== undefined && Number(record.tonnage) > 0
+        ? String(record.tonnage).replace('.', ',')
+        : ('' as any),
+    });
   };
 
   // Simpan Perubahan Edit ke Firestore
@@ -378,13 +403,14 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       showToast('Mohon masukkan Nomor Unit Truk (contoh: DT 90)', 'error');
       return;
     }
-    if (!editFormData.driverName.trim()) {
-      showToast('Mohon masukkan Nama Pemuat (contoh: Anton)', 'error');
-      return;
-    }
+    // Nama pemuat bersifat opsional
+    const cleanDriver = (editFormData.driverName || '').trim().toUpperCase();
+
+    // Tonase opsional: jika tidak diisi, biarkan kosong (null), jangan diisi angka 0
     const rawTonStr = String(editFormData.tonnage ?? '').trim().replace(',', '.');
-    const ton = rawTonStr === '' ? 0 : parseFloat(rawTonStr);
-    if (isNaN(ton) || ton < 0) {
+    const hasTonnage = rawTonStr !== '';
+    const parsedTon = hasTonnage ? parseFloat(rawTonStr) : null;
+    if (hasTonnage && (isNaN(parsedTon as number) || (parsedTon as number) < 0)) {
       showToast('Mohon masukkan Tonase yang valid dalam angka (contoh: 6,79) atau kosongkan', 'error');
       return;
     }
@@ -394,8 +420,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       await updateDailyRecord({
         ...editFormData,
         truckNumber: editFormData.truckNumber.trim().toUpperCase(),
-        driverName: editFormData.driverName.trim(),
-        tonnage: ton,
+        driverName: cleanDriver,
+        tonnage: parsedTon,
         afdeling: editFormData.afdeling.trim() || 'Afdeling 1',
         notes: (editFormData.notes || '').trim(),
       });
@@ -477,9 +503,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
       No: index + 1,
       Tanggal: r.date,
       'Unit Truk': r.truckNumber,
-      'Nama Pemuat': r.driverName,
+      'Nama Pemuat': r.driverName || '-',
       Afdeling: r.afdeling,
-      'Tonase (Ton)': r.tonnage,
+      'Tonase (Ton)': r.tonnage !== null && r.tonnage !== undefined && Number(r.tonnage) > 0 ? Number(r.tonnage) : '',
       'Catatan / Keterangan': r.notes || '-',
       'ID Dokumen Firestore': r.id,
     }));
@@ -1254,8 +1280,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                       <Truck className="w-3 h-3 text-emerald-400 shrink-0" />
                       <span>Unit Truk</span>
                     </label>
-                    <span className="text-[9px] text-emerald-400 font-mono">
-                      {dynamicTruckCodes.length} DT
+                    <span className="text-[9px] text-emerald-400 font-mono font-semibold" title="Menampilkan unit yang tersedia (Aktif) di Armada">
+                      Tersedia ({dynamicTruckCodes.length} Unit)
                     </span>
                   </div>
                   <input
@@ -1276,21 +1302,24 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
               </div>
 
               {/* Tombol Cepat Pilihan DT Ringkas */}
-              <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-0.5">
-                {dynamicTruckCodes.map((dt) => (
-                  <button
-                    key={dt}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, truckNumber: dt })}
-                    className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold transition border cursor-pointer ${
-                      formData.truckNumber.toUpperCase() === dt
-                        ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/60'
-                        : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                    }`}
-                  >
-                    {dt}
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pr-0.5">
+                {dynamicTruckCodes.map((dt) => {
+                  const isSelected = (formData.truckNumber || '').trim().toUpperCase() === dt.toUpperCase();
+                  return (
+                    <button
+                      key={dt}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, truckNumber: dt })}
+                      className={`text-[10px] px-2 py-0.5 rounded-md font-mono font-semibold transition border cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/60 ring-1 ring-emerald-500/40'
+                          : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                      }`}
+                    >
+                      {dt}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Nama Pemuat (Ringkas Multi-Select & Tambah Manual) */}
@@ -1300,6 +1329,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
                       <User className="w-3 h-3 text-emerald-400 shrink-0" />
                       <span>Nama Pemuat</span>
+                      <span className="text-[9px] font-normal lowercase text-slate-400">(opsional)</span>
                     </label>
                     {selectedPemuatList.length > 0 && (
                       <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
@@ -1333,10 +1363,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                 <input
                   type="text"
                   list="daily-pemuat-master-list"
-                  placeholder="Klik nama di bawah atau ketik (ANTON/DELFIN)..."
+                  placeholder="Klik nama di bawah atau ketik (opsional)..."
                   value={formData.driverName}
                   onChange={(e) => setFormData({ ...formData, driverName: e.target.value })}
-                  required
                   className="w-full px-2.5 py-1.5 bg-slate-800/80 border border-slate-700 rounded-lg text-white text-xs font-semibold focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500 font-mono"
                 />
                 <datalist id="daily-pemuat-master-list">
@@ -1401,7 +1430,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     type="text"
                     inputMode="decimal"
                     placeholder="Contoh: 6,79 (Boleh dikosongkan)"
-                    value={formData.tonnage}
+                    value={formData.tonnage ?? ''}
                     onChange={(e) => handleTonInputChange(e.target.value, false)}
                     className="w-full px-2.5 py-1.5 pr-12 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition placeholder:text-slate-500 placeholder:font-normal placeholder:text-xs"
                   />
@@ -1673,19 +1702,27 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                           </span>
                         </div>
                         <div className="text-right">
-                          <span className="font-mono font-black text-emerald-400 text-base">
-                            {Number(r.tonnage).toLocaleString('id-ID', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                          <span className="text-[11px] text-slate-400 ml-1 font-semibold">Ton</span>
+                          {r.tonnage !== null && r.tonnage !== undefined && Number(r.tonnage) > 0 ? (
+                            <>
+                              <span className="font-mono font-black text-emerald-400 text-base">
+                                {Number(r.tonnage).toLocaleString('id-ID', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
+                              <span className="text-[11px] text-slate-400 ml-1 font-semibold">Ton</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-slate-500 italic font-mono">-</span>
+                          )}
                         </div>
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-slate-300 pt-2 border-t border-slate-900">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">{r.driverName}</span>
+                          <span className="font-semibold text-white">
+                            {r.driverName || <span className="text-slate-500 italic font-normal text-xs">(Tanpa Pemuat)</span>}
+                          </span>
                           <span className="text-slate-600">•</span>
                           <span className="text-slate-400 text-[11px]">{formatDateIndo(r.date)}</span>
                         </div>
@@ -1774,7 +1811,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
                           {/* Pemuat */}
                           <td className="py-3 px-3 sm:px-4 font-medium text-white whitespace-nowrap">
-                            {r.driverName}
+                            {r.driverName || <span className="text-slate-500 italic font-normal text-xs">-</span>}
                           </td>
 
                           {/* Afdeling */}
@@ -1787,13 +1824,19 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
 
                           {/* Tonase */}
                           <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap">
-                            <span className="font-mono font-black text-emerald-400 text-sm">
-                              {Number(r.tonnage).toLocaleString('id-ID', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                            <span className="text-[11px] text-slate-400 ml-1">Ton</span>
+                            {r.tonnage !== null && r.tonnage !== undefined && Number(r.tonnage) > 0 ? (
+                              <>
+                                <span className="font-mono font-black text-emerald-400 text-sm">
+                                  {Number(r.tonnage).toLocaleString('id-ID', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </span>
+                                <span className="text-[11px] text-slate-400 ml-1">Ton</span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-slate-500 italic font-mono">-</span>
+                            )}
                           </td>
 
                           {/* Catatan */}
@@ -1899,15 +1942,21 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     <div
                       key={trip.id}
                       className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono hover:border-emerald-500/40 transition"
-                      title={`${trip.truckNumber} • ${trip.driverName} • ${trip.tonnage} Ton (${formatDateIndo(trip.date)})`}
+                      title={`${trip.truckNumber}${trip.driverName ? ` • ${trip.driverName}` : ''}${trip.tonnage !== null && trip.tonnage !== undefined && Number(trip.tonnage) > 0 ? ` • ${trip.tonnage} Ton` : ''} (${formatDateIndo(trip.date)})`}
                     >
                       <span className="font-bold text-sky-300 bg-sky-950/90 px-1.5 py-0.5 rounded text-[10px] border border-sky-500/30">
                         Rit {trip.ritNumber || idx + 1}
                       </span>
                       <span className="text-white font-semibold">{trip.truckNumber}</span>
-                      <span className="text-slate-400">&bull;</span>
-                      <span className="text-emerald-300 font-semibold">{trip.driverName}</span>
-                      <span className="text-emerald-400 font-bold">({trip.tonnage}T)</span>
+                      {trip.driverName && (
+                        <>
+                          <span className="text-slate-400">&bull;</span>
+                          <span className="text-emerald-300 font-semibold">{trip.driverName}</span>
+                        </>
+                      )}
+                      {trip.tonnage !== null && trip.tonnage !== undefined && Number(trip.tonnage) > 0 && (
+                        <span className="text-emerald-400 font-bold">({trip.tonnage}T)</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2000,21 +2049,24 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     required
                     className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-semibold text-xs focus:outline-none focus:border-emerald-500 transition"
                   />
-                  <div className="flex flex-wrap gap-1 mt-1.5 max-h-16 overflow-y-auto p-1 rounded-lg bg-slate-950/60 border border-slate-800/80">
-                    {dynamicTruckCodes.map((dt) => (
-                      <button
-                        key={dt}
-                        type="button"
-                        onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
-                        className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold transition border cursor-pointer ${
-                          editFormData.truckNumber.toUpperCase() === dt.toUpperCase()
-                            ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50'
-                            : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/60'
-                        }`}
-                      >
-                        {dt}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto p-1 rounded-lg bg-slate-950/60 border border-slate-800/80">
+                    {dynamicTruckCodes.map((dt) => {
+                      const isSelected = (editFormData.truckNumber || '').trim().toUpperCase() === dt.toUpperCase();
+                      return (
+                        <button
+                          key={dt}
+                          type="button"
+                          onClick={() => setEditFormData({ ...editFormData, truckNumber: dt })}
+                          className={`text-[10px] px-2 py-0.5 rounded font-mono font-semibold transition border cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50 ring-1 ring-emerald-500/40'
+                              : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border-slate-700/60'
+                          }`}
+                        >
+                          {dt}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -2023,7 +2075,8 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
                       <User className="w-3 h-3 text-emerald-400" />
-                      <span>Nama Pemuat (Bisa &gt; 1)</span>
+                      <span>Nama Pemuat</span>
+                      <span className="text-[9px] font-normal lowercase text-slate-400">(opsional)</span>
                     </label>
                     {selectedEditPemuatList.length > 0 && (
                       <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
@@ -2035,8 +2088,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                     type="text"
                     value={editFormData.driverName}
                     onChange={(e) => setEditFormData({ ...editFormData, driverName: e.target.value })}
-                    placeholder="Contoh: ANTON/DELFIN"
-                    required
+                    placeholder="Contoh: ANTON/DELFIN (opsional)"
                     className="w-full px-2.5 py-1.5 bg-slate-800/90 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-500 transition font-mono"
                   />
                   <div className="flex flex-wrap gap-1 mt-1.5 max-h-20 overflow-y-auto p-1 rounded-lg bg-slate-950/60 border border-slate-800/80">
@@ -2091,7 +2143,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                       type="text"
                       inputMode="decimal"
                       placeholder="Contoh: 6,79 (Boleh kosong)"
-                      value={editFormData.tonnage}
+                      value={editFormData.tonnage ?? ''}
                       onChange={(e) => handleTonInputChange(e.target.value, true)}
                       className="w-full px-2.5 py-1.5 pr-12 bg-slate-800/90 border border-slate-700 rounded-lg text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-500 transition"
                     />
@@ -2221,7 +2273,7 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Pemuat:</span>
-                <span className="font-medium text-white">{recordToDelete.driverName}</span>
+                <span className="font-medium text-white">{recordToDelete.driverName || '-'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Tanggal:</span>
@@ -2233,7 +2285,11 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Tonase:</span>
-                <span className="font-bold text-white font-mono">{recordToDelete.tonnage} Ton</span>
+                <span className="font-bold text-white font-mono">
+                  {recordToDelete.tonnage !== null && recordToDelete.tonnage !== undefined && Number(recordToDelete.tonnage) > 0
+                    ? `${recordToDelete.tonnage} Ton`
+                    : 'Kosong (Tanpa Tonase)'}
+                </span>
               </div>
             </div>
 
@@ -2474,12 +2530,23 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                                     >
                                       <span>
                                         <strong className="text-sky-400">Rit {t.ritNumber || idx + 1}:</strong>{' '}
-                                        {t.truckNumber} &bull;{' '}
-                                        <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                        {t.truckNumber}
+                                        {t.driverName && (
+                                          <>
+                                            {' '}&bull;{' '}
+                                            <span className="text-emerald-300 font-semibold">{t.driverName}</span>
+                                          </>
+                                        )}
                                       </span>
-                                      <span className="text-white font-bold shrink-0">
-                                        ({Number(t.tonnage) || 0}T)
-                                      </span>
+                                      {t.tonnage !== null && t.tonnage !== undefined && Number(t.tonnage) > 0 ? (
+                                        <span className="text-white font-bold shrink-0">
+                                          ({Number(t.tonnage)}T)
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-500 italic text-[9px] shrink-0">
+                                          -
+                                        </span>
+                                      )}
                                     </span>
                                   ))}
                                 </div>
@@ -2537,7 +2604,9 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
                               Rit {trip.ritNumber || 1}
                             </span>
-                            <span className="font-bold text-xs text-white">{trip.driverName}</span>
+                            <span className="font-bold text-xs text-white">
+                              {trip.driverName || <span className="text-slate-500 italic font-normal text-xs">(Tanpa Pemuat)</span>}
+                            </span>
                             <span className="text-xs text-slate-400">&bull; {trip.afdeling}</span>
                             {trip.notes && (
                               <span className="text-[11px] text-slate-400 font-mono">({trip.notes})</span>
@@ -2545,13 +2614,17 @@ export const DailyRecordsView: React.FC<DailyRecordsViewProps> = ({ trucks = [],
                           </div>
 
                           <div className="flex items-center justify-between sm:justify-end gap-2 border-t sm:border-t-0 border-slate-900 pt-2 sm:pt-0 shrink-0">
-                            <span className="text-sm font-black text-emerald-400 font-mono">
-                              {(Number(trip.tonnage) || 0).toLocaleString('id-ID', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}{' '}
-                              <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
-                            </span>
+                            {trip.tonnage !== null && trip.tonnage !== undefined && Number(trip.tonnage) > 0 ? (
+                              <span className="text-sm font-black text-emerald-400 font-mono">
+                                {(Number(trip.tonnage)).toLocaleString('id-ID', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}{' '}
+                                <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-500 italic font-mono">-</span>
+                            )}
 
                             <div className="flex items-center gap-1.5">
                               <button

@@ -533,12 +533,20 @@ export function subscribeToDailyRecords(
         const rawItems: DailyRecord[] = [];
         snapshot.forEach((docSnapshot) => {
           const data = docSnapshot.data();
+          let parsedTonnage: number | null = null;
+          if (data.tonnage !== null && data.tonnage !== undefined && data.tonnage !== '') {
+            const num = Number(data.tonnage);
+            if (!isNaN(num) && num > 0) {
+              parsedTonnage = num;
+            }
+          }
+
           rawItems.push({
             id: docSnapshot.id,
             date: data.date || new Date().toISOString().split("T")[0],
             truckNumber: data.truckNumber || "DT -",
-            driverName: data.driverName || "-",
-            tonnage: typeof data.tonnage === "number" ? data.tonnage : parseFloat(data.tonnage) || 0,
+            driverName: (data.driverName || "").trim(),
+            tonnage: parsedTonnage,
             afdeling: (data.afdeling || "Afdeling 1").trim(),
             ritNumber: typeof data.ritNumber === "number" ? data.ritNumber : parseInt(data.ritNumber, 10) || undefined,
             notes: data.notes || "",
@@ -618,14 +626,21 @@ export async function addDailyRecord(record: NewDailyRecord): Promise<string> {
     }
   }
 
+  const hasValidTonnage =
+    record.tonnage !== null &&
+    record.tonnage !== undefined &&
+    String(record.tonnage).trim() !== '' &&
+    !isNaN(Number(record.tonnage)) &&
+    Number(record.tonnage) > 0;
+
   const docRef = await addDoc(dailyRecordsCollection, {
     date: record.date,
-    truckNumber: record.truckNumber.trim().toUpperCase(),
-    driverName: record.driverName.trim(),
-    tonnage: Number(record.tonnage),
-    afdeling: record.afdeling.trim(),
+    truckNumber: (record.truckNumber || '').trim().toUpperCase(),
+    driverName: (record.driverName || '').trim(),
+    tonnage: hasValidTonnage ? Number(record.tonnage) : null,
+    afdeling: (record.afdeling || 'Afdeling 1').trim(),
     ritNumber: Number(calculatedRitNumber),
-    notes: (record.notes || "").trim(),
+    notes: (record.notes || '').trim(),
     createdAt: serverTimestamp(),
   });
   return docRef.id;
@@ -670,14 +685,21 @@ export async function deleteAllDailyRecords(targetIds?: string[]): Promise<numbe
 
 export async function updateDailyRecord(record: DailyRecord): Promise<void> {
   const targetDoc = doc(db, COLLECTIONS.DAILY_RECORDS, record.id);
+  const hasValidTonnage =
+    record.tonnage !== null &&
+    record.tonnage !== undefined &&
+    String(record.tonnage).trim() !== '' &&
+    !isNaN(Number(record.tonnage)) &&
+    Number(record.tonnage) > 0;
+
   await updateDoc(targetDoc, {
     date: record.date,
-    truckNumber: record.truckNumber.trim().toUpperCase(),
-    driverName: record.driverName.trim(),
-    tonnage: Number(record.tonnage),
-    afdeling: record.afdeling.trim(),
+    truckNumber: (record.truckNumber || '').trim().toUpperCase(),
+    driverName: (record.driverName || '').trim(),
+    tonnage: hasValidTonnage ? Number(record.tonnage) : null,
+    afdeling: (record.afdeling || 'Afdeling 1').trim(),
     ritNumber: Number(record.ritNumber) || 1,
-    notes: (record.notes || "").trim(),
+    notes: (record.notes || '').trim(),
     updatedAt: serverTimestamp(),
   });
 }

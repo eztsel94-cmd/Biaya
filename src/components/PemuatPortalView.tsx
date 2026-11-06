@@ -33,6 +33,7 @@ import {
   subscribeToDailyRecords,
   subscribeToFirestorePemuat,
 } from '../services/firebase';
+import { DEFAULT_TRAKSI_TRUCKS } from '../data/initialData';
 import {
   getPemuatPortalUrl,
   getWhatsAppSharePemuatUrl,
@@ -76,7 +77,7 @@ export interface PemuatShareInfo {
 }
 
 export function getRecordPemuatShare(
-  record: { driverName?: string; tonnage?: number | string },
+  record: { driverName?: string; tonnage?: number | string | null },
   targetPemuat?: string
 ): PemuatShareInfo {
   const rawTonnage = Number(record.tonnage) || 0;
@@ -280,14 +281,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
     return Array.from(nameSet).sort((a, b) => a.localeCompare(b, 'id'));
   }, [pemuatMaster, records]);
 
-  // Dynamic Truck codes
+  // Dynamic Truck codes (Armada Traksi KPU 18 unit, armada kustom, & riwayat)
   const dynamicTruckCodes = useMemo(() => {
-    const codeSet = new Set<string>();
+    const codeSet = new Set<string>(DEFAULT_TRAKSI_TRUCKS);
     trucks.forEach((t) => {
-      if (t.code) codeSet.add(t.code.trim().toUpperCase());
+      if (t.code && t.code.trim()) codeSet.add(t.code.trim().toUpperCase());
     });
     records.forEach((r) => {
-      if (r.truckNumber) codeSet.add(r.truckNumber.trim().toUpperCase());
+      if (r.truckNumber && r.truckNumber.trim()) codeSet.add(r.truckNumber.trim().toUpperCase());
     });
     return Array.from(codeSet).sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
   }, [trucks, records]);
@@ -1405,10 +1406,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                         </div>
 
                         <div className="text-right sm:shrink-0 border-t sm:border-t-0 border-slate-900 pt-1.5 sm:pt-0">
-                          <span className="text-base font-black text-emerald-400 font-mono block">
-                            {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                            <span className="text-xs font-semibold text-emerald-400/80">Ton</span>
-                          </span>
+                          {share.rawTonnage > 0 ? (
+                            <span className="text-base font-black text-emerald-400 font-mono block">
+                              {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                              <span className="text-xs font-semibold text-emerald-400/80">Ton</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-500 italic font-mono block">-</span>
+                          )}
                           {selectedPemuat && share.isShared && (
                             <span className="text-[10px] font-mono text-slate-400 block">
                               Total Truk: {share.rawTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T &divide; {share.pemuatCount}
@@ -1647,7 +1652,9 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30">
                                 Rit {trip.ritNumber || 1}
                               </span>
-                              <span className="font-bold text-xs text-white">{trip.driverName}</span>
+                              <span className="font-bold text-xs text-white">
+                                {trip.driverName || <span className="text-slate-500 italic font-normal text-xs">(Tanpa Pemuat)</span>}
+                              </span>
                               {share.isShared && (
                                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-amber-300 border border-amber-500/30">
                                   Bagi {share.pemuatCount}
@@ -1660,10 +1667,14 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
                             </div>
 
                             <div className="text-right shrink-0">
-                              <span className="text-sm font-black text-emerald-400 font-mono block">
-                                {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                                <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
-                              </span>
+                              {share.rawTonnage > 0 ? (
+                                <span className="text-sm font-black text-emerald-400 font-mono block">
+                                  {share.shareTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                  <span className="text-[10px] font-semibold text-emerald-400/80">Ton</span>
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic font-mono block">-</span>
+                              )}
                               {selectedPemuat && share.isShared && (
                                 <span className="text-[10px] font-mono text-slate-400 block">
                                   ({share.rawTonnage.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} T &divide; {share.pemuatCount})
