@@ -18,6 +18,8 @@ import {
   Settings,
   BarChart3,
   LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 import { AppUser } from '../types/truck';
@@ -31,6 +33,8 @@ interface NavbarProps {
   expenseCount: number;
   isRealtimeConnected: boolean;
   currentUser: AppUser;
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
   onOpenUserModal: () => void;
   onOpenDataManager: () => void;
   onOpenAddExpense: () => void;
@@ -46,6 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   expenseCount,
   isRealtimeConnected,
   currentUser,
+  theme = 'light',
+  onToggleTheme,
   onOpenUserModal,
   onOpenDataManager,
   onOpenAddExpense,
@@ -218,6 +224,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </>
               )}
 
+              {onToggleTheme && (
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  title={theme === 'light' ? 'Beralih ke Mode Gelap' : 'Beralih ke Mode Terang (Siang Hari)'}
+                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-sm border cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                >
+                  {theme === 'light' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                      <span className="text-[11px] font-bold">Terang</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-sky-400 fill-sky-400" />
+                      <span className="text-[11px] font-bold">Gelap</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               {onLogout && (
                 <button
                   type="button"
@@ -233,6 +260,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Mobile Top Right Actions (Compact on HP) */}
             <div className="flex md:hidden items-center gap-1.5">
+              {onToggleTheme && (
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  title={theme === 'light' ? 'Beralih ke Mode Gelap' : 'Beralih ke Mode Terang (Siang Hari)'}
+                  className="p-1.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 flex items-center justify-center cursor-pointer"
+                >
+                  {theme === 'light' ? (
+                    <Sun className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-sky-400 fill-sky-400" />
+                  )}
+                </button>
+              )}
+
               {currentUser.role !== 'viewer' && (
                 <button
                   onClick={onOpenExcelImport}
@@ -413,6 +455,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Pilihan Mode Tampilan (Terang Siang Hari / Gelap) */}
+            {onToggleTheme && (
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+                <div className="flex items-center gap-2">
+                  {theme === 'light' ? (
+                    <Sun className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-sky-400 fill-sky-400" />
+                  )}
+                  <div>
+                    <span className="font-bold text-white block text-xs">
+                      {theme === 'light' ? 'Mode Terang (Siang Hari)' : 'Mode Gelap'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {theme === 'light' ? 'Warna terang jelas di bawah terik matahari' : 'Warna gelap hemat baterai'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                >
+                  {theme === 'light' ? 'Ubah ke Gelap' : 'Ubah ke Terang'}
+                </button>
+              </div>
+            )}
 
             {/* Quick Actions Grid */}
             <div className="grid grid-cols-2 gap-2.5 pt-1">

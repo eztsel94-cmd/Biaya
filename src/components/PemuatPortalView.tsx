@@ -25,6 +25,8 @@ import {
   KeyRound,
   AlertCircle,
   MessageCircle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DailyRecord } from '../types/dailyRecord';
@@ -202,6 +204,34 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
+
+  // Mode Terang / Gelap
+  const [portalTheme, setPortalTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('traksi_kpu_theme_mode');
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch {}
+    return 'light'; // Default Terang (Siang Hari)
+  });
+
+  const togglePortalTheme = () => {
+    const nextTheme = portalTheme === 'light' ? 'dark' : 'light';
+    setPortalTheme(nextTheme);
+    try {
+      localStorage.setItem('traksi_kpu_theme_mode', nextTheme);
+      if (nextTheme === 'light') {
+        document.documentElement.classList.add('theme-light');
+        document.documentElement.classList.remove('theme-dark');
+        document.body.classList.add('theme-light');
+        document.body.classList.remove('theme-dark');
+      } else {
+        document.documentElement.classList.remove('theme-light');
+        document.documentElement.classList.add('theme-dark');
+        document.body.classList.remove('theme-light');
+        document.body.classList.add('theme-dark');
+      }
+    } catch {}
+  };
 
   // Sinkronisasi otomatis tanggal WIB secara real-time
   useEffect(() => {
@@ -718,6 +748,26 @@ export const PemuatPortalView: React.FC<PemuatPortalViewProps> = ({
 
             {/* Quick Actions */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Tombol Mode Terang / Gelap */}
+              <button
+                type="button"
+                onClick={togglePortalTheme}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition cursor-pointer shadow-sm"
+                title={portalTheme === 'light' ? 'Ubah ke Mode Gelap' : 'Ubah ke Mode Terang (Siang Hari)'}
+              >
+                {portalTheme === 'light' ? (
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                    <span className="hidden sm:inline text-[11px]">Terang</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-sky-400 fill-sky-400" />
+                    <span className="hidden sm:inline text-[11px]">Gelap</span>
+                  </>
+                )}
+              </button>
+
               {/* Salin Link */}
               <button
                 type="button"

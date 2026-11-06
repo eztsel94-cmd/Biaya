@@ -1,1 +1,224 @@
 @import "tailwindcss";
+
+/* ========================================================================= */
+/* MODE TERANG / DAYLIGHT HIGH-CONTRAST THEME UNTUK OPERASIONAL SIANG HARI  */
+/* ========================================================================= */
+html.theme-light,
+body.theme-light,
+.theme-light {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Background Surfaces: Slate-950 & Slate-900 become clean bright white or slate-50 */
+.theme-light .bg-slate-950,
+.theme-light .bg-slate-950\/95,
+.theme-light .bg-slate-950\/90,
+.theme-light .bg-slate-950\/80,
+.theme-light .bg-slate-950\/70,
+.theme-light .bg-slate-950\/60,
+.theme-light .bg-slate-950\/50 {
+  background-color: #f8fafc !important;
+}
+
+.theme-light .bg-slate-900,
+.theme-light .bg-slate-900\/95,
+.theme-light .bg-slate-900\/90,
+.theme-light .bg-slate-900\/80,
+.theme-light .bg-slate-900\/70,
+.theme-light .bg-slate-900\/60,
+.theme-light .bg-slate-900\/50,
+.theme-light .bg-slate-900\/40,
+.theme-light .bg-slate-900\/30 {
+  background-color: #ffffff !important;
+}
+
+.theme-light .bg-slate-800,
+.theme-light .bg-slate-800\/95,
+.theme-light .bg-slate-800\/90,
+.theme-light .bg-slate-800\/80,
+.theme-light .bg-slate-800\/70,
+.theme-light .bg-slate-800\/60,
+.theme-light .bg-slate-800\/50,
+.theme-light .bg-slate-800\/40,
+.theme-light .bg-slate-800\/30 {
+  background-color: #f1f5f9 !important;
+}
+
+.theme-light .bg-slate-700,
+.theme-light .bg-slate-700\/80,
+.theme-light .bg-slate-700\/60 {
+  background-color: #e2e8f0 !important;
+}
+
+/* Header & Card Shadows */
+.theme-light header,
+.theme-light .bg-slate-900,
+.theme-light .bg-slate-950 {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.07), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+}
+
+/* Borders in Light Mode */
+.theme-light .border-slate-800,
+.theme-light .border-slate-800\/80,
+.theme-light .border-slate-800\/60,
+.theme-light .border-slate-900,
+.theme-light .border-slate-700,
+.theme-light .border-slate-700\/90,
+.theme-light .border-slate-700\/80,
+.theme-light .border-slate-700\/60,
+.theme-light .border-slate-600 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Text Overrides for Ultra Sharp Daylight Legibility */
+.theme-light .text-white,
+.theme-light .text-slate-100,
+.theme-light .text-slate-200 {
+  color: #0f172a !important;
+}
+
+.theme-light .text-slate-300 {
+  color: #1e293b !important;
+}
+
+.theme-light .text-slate-400 {
+  color: #334155 !important;
+}
+
+.theme-light .text-slate-500 {
+  color: #64748b !important;
+}
+
+.theme-light .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+/* High Contrast Accent Colors for Sunlight */
+.theme-light .text-emerald-400,
+.theme-light .text-emerald-300 {
+  color: #047857 !important;
+}
+
+.theme-light .text-sky-400,
+.theme-light .text-sky-300 {
+  color: #0284c7 !important;
+}
+
+.theme-light .text-amber-400,
+.theme-light .text-amber-300 {
+  color: #b45309 !important;
+}
+
+.theme-light .text-rose-400,
+.theme-light .text-rose-300 {
+  color: #be123c !important;
+}
+
+/* Inputs, Selects, & Textareas in Light Mode */
+.theme-light input,
+.theme-light select,
+.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light input:focus,
+.theme-light select:focus,
+.theme-light textarea:focus {
+  border-color: #059669 !important;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
+}
+
+.theme-light input::placeholder,
+.theme-light textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Chips and Buttons in Light Mode */
+.theme-light button.bg-slate-800,
+.theme-light button.bg-slate-800\/80,
+.theme-light button.bg-slate-800\/70,
+.theme-light button.bg-slate-800\/60 {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light button.bg-slate-800:hover,
+.theme-light button.bg-slate-800\/80:hover,
+.theme-light button.bg-slate-800\/70:hover,
+.theme-light button.bg-slate-800\/60:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Active chips and tinted pills */
+.theme-light .bg-emerald-500\/25,
+.theme-light .bg-emerald-500\/20,
+.theme-light .bg-emerald-500\/15,
+.theme-light .bg-emerald-500\/10,
+.theme-light .bg-emerald-950,
+.theme-light .bg-emerald-950\/90,
+.theme-light .bg-emerald-950\/80,
+.theme-light .bg-emerald-950\/70 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #065f46 !important;
+}
+
+.theme-light .bg-sky-500\/15,
+.theme-light .bg-sky-500\/20,
+.theme-light .bg-sky-500\/10,
+.theme-light .bg-sky-950,
+.theme-light .bg-sky-950\/90,
+.theme-light .bg-sky-950\/80 {
+  background-color: #f0f9ff !important;
+  border-color: #7dd3fc !important;
+  color: #0369a1 !important;
+}
+
+.theme-light .bg-amber-500\/15,
+.theme-light .bg-amber-500\/10,
+.theme-light .bg-amber-950,
+.theme-light .bg-amber-950\/90 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+
+.theme-light .bg-rose-500\/15,
+.theme-light .bg-rose-500\/10,
+.theme-light .bg-rose-950,
+.theme-light .bg-rose-950\/90,
+.theme-light .bg-rose-950\/70,
+.theme-light .bg-rose-950\/60,
+.theme-light .bg-rose-950\/30 {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  color: #9f1239 !important;
+}
+
+/* Modals backdrop */
+.theme-light .bg-black\/80,
+.theme-light .bg-black\/75,
+.theme-light .bg-black\/70,
+.theme-light .bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Table header in light mode */
+.theme-light thead {
+  background-color: #f1f5f9 !important;
+}
+
+.theme-light thead th {
+  color: #334155 !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+}
+
+.theme-light tbody tr:hover {
+  background-color: #f8fafc !important;
+}

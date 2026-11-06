@@ -49,9 +49,12 @@ import {
   Eye,
   EyeOff,
   LogIn,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 const WEB_AUTH_STORAGE_KEY = 'traksi_kpu_web_auth_v2';
+const THEME_STORAGE_KEY = 'traksi_kpu_theme_mode';
 
 // Bersihkan token lama dari localStorage agar pengguna langsung disajikan layar login
 try {
@@ -62,6 +65,36 @@ try {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTabType>('daily_records');
+
+  // Mode Terang / Gelap (Default Terang untuk siang hari di lapangan / terik matahari)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch {}
+    return 'light';
+  });
+
+  useEffect(() => {
+    try {
+      if (theme === 'light') {
+        document.documentElement.classList.add('theme-light');
+        document.documentElement.classList.remove('theme-dark');
+        document.body.classList.add('theme-light');
+        document.body.classList.remove('theme-dark');
+      } else {
+        document.documentElement.classList.remove('theme-light');
+        document.documentElement.classList.add('theme-dark');
+        document.body.classList.remove('theme-light');
+        document.body.classList.add('theme-dark');
+      }
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {}
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  };
 
   // State Login Utama Web (User: TRAKSIKSR, Password: TRAKSI_001)
   // Dimulai dari false kecuali sudah login pada sesi aktif saat ini
@@ -603,6 +636,28 @@ export default function App() {
         <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="w-full max-w-md bg-slate-900/95 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative z-10 backdrop-blur-md">
+          {/* Top Row: Theme Toggle */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition shadow-sm cursor-pointer"
+              title={theme === 'light' ? 'Ubah ke Mode Gelap' : 'Ubah ke Mode Terang (Siang Hari)'}
+            >
+              {theme === 'light' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  <span>Mode Terang (Siang Hari)</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-sky-400 fill-sky-400" />
+                  <span>Mode Gelap</span>
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Logo & Judul Sistem */}
           <div className="flex flex-col items-center text-center space-y-3">
             <div className="h-16 px-4 py-2 rounded-2xl bg-white flex items-center justify-center shadow-lg shadow-emerald-500/15 ring-2 ring-emerald-500/30">
@@ -757,6 +812,8 @@ export default function App() {
         expenseCount={expenses.length}
         isRealtimeConnected={isRealtimeConnected}
         currentUser={currentUser}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onOpenUserModal={() => setIsUserModalOpen(true)}
         onOpenDataManager={() => setIsDataManagerOpen(true)}
         onOpenAddExpense={() => handleOpenAddExpense()}
